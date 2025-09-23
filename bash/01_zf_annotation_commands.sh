@@ -1,5 +1,6 @@
 ################################################################################
-### ANNOTATION OF NON-B DNA IN THE ZEBRA FINCH T2T GENOME
+### ANNOTATION OF NON-B DNA IN THE ZEBRA FINCH T2T GENOME, AND OVERLAPS 
+### BETWEEN THE DIFFERENT MOTIFS. 
 ### CODE WRITTEN BY LINNÉA SMEDS
 
 # This file contains the first code, including downloading the genome and 
@@ -10,11 +11,12 @@
 # within the slurm scripts can be copied and run on any machine with enough
 # RAM/cores.
 
-##### LIST OF CONTENTS 
+##### TABLE OF CONTENTS
 # REQUIREMENTS 
 # ANNOTATION WITH GFA
 # ANNOTATION WITH QUADRON
 # CREATE A JOINT DIRECTORY WITH ANNOTATIONS
+# OVERLAP BETWEEN NON-B TYPES
 
 
 
@@ -23,12 +25,24 @@
 # bedtools/2.31.0
 # gfa (downloaded Feb 4, 2025 from https://github.com/abcsFrederick/non-B_gfa)
 # Quadron (dockerized version 1.0.0 from https://hub.docker.com/r/kxk302/quadron)
+# circos/0.69-9
+# python/3.11.2
 
-
-# Download Zebra Finch genome from GenomeArk
+# Download Zebra Finch genome, centromere annotation, repeat annotation, genes,
+#  from GenomeArk
 mkdir ref
 cd ref
 wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/assembly_verkko_0.1/manual_curation/bTaeGut7v0.4/bTaeGut7v0.4_MT_rDNA.fa.gz
+wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/centromeres/bTaeGut7v0.4_MT_rDNA.centromere_detector.v0.1.gff
+wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/repeats/bTaeGut7v0.4_MT_rDNA.EDTA2.v0.2.gtf.gz
+wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/repeats/bTaeGut7v0.4_MT_rDNA.trf.sorted.v0.1.bed
+wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/repeats/bTaeGut7v0.4_MT_rDNA.satellome.v0.1.bed
+wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/genes/bTaeGut7v0.4_MT_rDNA.EGAPx.v0.1.gtf.gz
+wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/genes/bTaeGut7v0.4.v0.1.annotation.modified.longest_isoform.only_exon.gtf
+wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/genes/bTaeGut7v0.4.v0.1.annotation.modified.longest_isoform.only_gene.gtf
+wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/genes/bTaeGut7v0.4.v0.1.annotation.modified.longest_isoform.only_intron.gtf
+wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/methylation/bTaeGut7v0.4_MT_rDNA.PBmethylation.v0.1.bw
+
 gunzip bTaeGut7v0.4_MT_rDNA.fa.gz
 cd ..
 
@@ -126,4 +140,136 @@ do
  sort -k1,1 -k2,2n final_nonB/'$prefix'.'${n}'.bed |mergeBed -i - >final_nonB/'$prefix'.'${n}'.merged.bed
  '| sbatch -J $n --ntasks=1 --cpus-per-task=1 --mem-per-cpu=8G --out slurm/mergeBed.$n.%j.out
  done
+
+
+######################### OVERLAP BETWEEN NON-B TYPES ##########################
+# Check overlap between all non-B types to be visulized with an upset plot
+
+mkdir overlap
+prefix="bTaeGut7v0.4_MT_rDNA"
+# Check overlap for each chromosome separately
+cat ref/${prefix}*.fa.fai |cut -f1 |tail -n+2 |while read -r chr;
+do
+  echo '#!/bin/bash
+  echo "Running upset for '$chr'"
+  module load python/3.11.2
+  python3 python/upset_summary.py -b final_nonB/'$prefix'. -c '$chr' -o overlap/summary.'$chr'.txt
+  ' | sbatch -J $chr --ntasks=1 --mem-per-cpu=6G --cpus-per-task=1 --time=1:00:00
+done
+# The longest chr2 took 3Gb of RAM and less than a minute to run.
+
+# Merge autosomes
+cat overlap/summary.chr[0-9]*.txt |sort | awk -v OFS="\t" '{if(NR==1){type=$1; sum=$2}else{if($1==type){sum+=$2}else{print type,sum; type=$1; sum=$2}}}END{print type,sum}' > overlap/summary.autosomes.txt
+# And rDNA
+cat overlap/summary.rDNA*.txt |sort | awk -v OFS="\t" '{if(NR==1){type=$1; sum=$2}else{if($1==type){sum+=$2}else{print type,sum; type=$1; sum=$2}}}END{print type,sum}' > overlap/summary.rDNA.txt
+# And chromosome types 
+for type in "macro" "micro" "microdot"
+do
+  for chr in $(cat helpfiles/$type.txt)
+  do
+    cat overlap/summary.$chr.txt
+  done | sort | awk -v OFS="\t" '{if(NR==1){type=$1; sum=$2}else{if($1==type){sum+=$2}else{print type,sum; type=$1; sum=$2}}}END{print type,sum}' > overlap/summary.$type.txt
+done
+
+# PAIRWISE OVERLAP WITH FRACTION
+# To get the fraction I first need the totals for all types
+mkdir stats/nonB_totals
+for file in $(ls overlap/summary.*.txt)
+do
+  chr=`echo $file | cut -f2 -d"."`
+  echo $chr
+  echo "#NonB bp" |sed "s/ /\t/g" >stats/nonB_totals/annotated.${chr}.txt
+  for nb in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
+  do
+    grep $nb $file |awk -v nb=$nb '{sum+=$2}END{print nb"\t"sum}' >>stats/nonB_totals/annotated.${chr}.txt
+  done
+done
+
+# Make bed files for each chr type (this is just to simplify the next step)
+mkdir final_nonB/merged_per_chrom/
+cat ref/${prefix}*.fa.fai |cut -f1 |while read -r chr;
+do
+  echo $chr
+  for nb in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
+  do
+    grep $chr final_nonB/$prefix.$nb.bed |sort -k1,1 -k2,2n |mergeBed -i - >final_nonB/merged_per_chrom/$chr.$nb.bed
+  done
+done
+# Autosomes & rDNA
+for nb in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
+do
+  cat final_nonB/merged_per_chrom/chr[0-9]*.$nb.bed > final_nonB/merged_per_chrom/autosomes.$nb.bed
+  cat final_nonB/merged_per_chrom/rDNA_*.$nb.bed > final_nonB/merged_per_chrom/rDNA.$nb.bed
+done
+# Macro, micro, dot
+for type in "macro" "micro" "microdot"
+do
+  for nb in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
+  do
+    for chr in $(cat $type.txt)
+    do
+      cat final_nonB/merged_per_chrom/$chr.$nb.bed
+    done >final_nonB/merged_per_chrom/$type.$nb.bed
+  done
+done
+
+# Then we can combine all the types
+for file in $(ls stats/nonB_totals/annotated.*.txt )
+do
+  chr=`echo $file | cut -f2 -d"."`
+  echo "Chr NB1 NB2 Ovl Frac" | sed "s/ /\t/g" >overlap/pairwise.$chr.txt
+  echo '#!/bin/bash
+  module load bedtools/2.31.0
+# Go through all combinations
+  for nb in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
+  do
+    nbbp=`grep $nb '$file' |cut -f2`
+    echo "$nb has $nbbp number of bp!"
+    for nb2 in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
+    do
+        if [[ $nb != $nb2 ]]
+        then
+          intersectBed -a final_nonB/merged_per_chrom/'$chr'.$nb.bed -b final_nonB/merged_per_chrom/'$chr'.$nb2.bed -wo | awk -v tot=$nbbp -v chr='$chr' -v sum=0 -v nb1=$nb -v nb2=$nb2 -v OFS="\t" '"'"'{sum+=$7}END{f=sum/tot; print chr,nb1,nb2,sum,f}'"'"' >>overlap/pairwise.'$chr'.txt
+        fi
+    done
+  done
+  ' | sbatch -J $chr --ntasks=1 --cpus-per-task=1 --mem-per-cpu=4G --time=1:00:00 --out slurm/job.pairwise-overlap.$chr.%j.%N.out
+done
+
+# Merging the groups
+echo "Region NonB Overlap" |sed 's/ /\t/g' >overlap/merged.summary.txt
+echo "Region NB1 NB2 Ovl Frac" |sed 's/ /\t/g' >overlap/merged.pairwise.txt
+for type in "macro" "micro" "microdot" "autosomes" "chrW_mat" "chrZ_pat"
+do
+  awk -v t=$type '{print t"\t"$0}' overlap/summary.$type.txt >>overlap/merged.summary.txt
+  awk -v t=$type '(NR>1){print $0}' overlap/pairwise.$type.txt >>overlap/merged.pairwise.txt
+done
+
+
+# Some stats
+# Number of non-B bases
+grep cro overlap/merged.summary.txt |awk '{sum+=$3}END{print sum}'
+#245759702
+# Number of bases in overlap
+grep cro overlap/merged.summary.txt |grep "-" |awk '{sum+=$3}END{print sum}'
+#48347053
+# Number of bp in at least three types
+grep cro overlap/merged.summary.txt |grep "-" |awk -F'\t' 'gsub(/-/, "&", $2) >= 2' |awk '{sum+=$3}END{print sum}'
+#17180744
+
+# Number of bases with only one vs more than one non-B annotation
+for set in "autosomes" "chrZ_pat" "chrW_mat" "macro" "micro" "microdot"
+do
+  u=`grep -v "-" overlap/summary.$set.txt |awk '{sum+=$2}END{print sum}'`
+  o=`grep "-" overlap/summary.$set.txt |awk '{sum+=$2}END{print sum}'`
+  echo $set $u $o
+done 
+
+# Overlap between G4 and DR, genome wide
+less overlap/merged.pairwise.txt |grep "DR" |grep "G4" |grep "cro" |sort -k4n |cut -f4 |uniq |awk '{sum+=$1}END{print sum}'
+#16567688
+# Total number of non-B bases
+grep ALL densities/bTaeGut7v0.4_MT_rDNA.nonB_genome_wide.txt
+#ALL 245781668 0.113636
+
 
