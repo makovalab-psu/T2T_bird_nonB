@@ -26,7 +26,9 @@
 # Quadron (dockerized version 1.0.0 from https://hub.docker.com/r/kxk302/quadron)
 # circos/0.69-9
 # python/3.11.2
+# samtools/1.19.2
 # convert2bed/2.4.41
+# R/4.5.1
 
 # Download Zebra Finch genome, centromere annotation, repeat annotation, genes,
 #  from GenomeArk
@@ -65,7 +67,7 @@ mkdir gfa_annotation
 # Set parameters
 fasta="ref/bTaeGut7v0.4_MT_rDNA.fa"
 prefix="bTaeGut7v0.4_MT_rDNA"
-# Run gfa on local scratch, convert to bed and copy files back to storage
+# Run gfa and convert to bed
 echo '#!/bin/bash
 echo "##### Start gfa"
 ~/software/non-B_gfa/gfa -seq '$fasta' -out gfa_annotation/'$prefix'  -skipGQ -skipWGET
