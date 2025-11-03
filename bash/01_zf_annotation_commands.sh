@@ -3,8 +3,8 @@
 ### BETWEEN THE DIFFERENT MOTIFS. 
 ### CODE WRITTEN BY LINNÉA SMEDS
 
-# This file contains the first code, including downloading the genome and 
-# running the annotation software. 
+# This file contains the first code, including downloading the zebra finch 
+# genome and running the annotation software. 
 
 # All commands are assumed to be run from within the downloaded github repo.
 # Time and/or memory consuming jobs were run on a slurm cluster. The code 
@@ -17,8 +17,7 @@
 # ANNOTATION WITH QUADRON
 # CREATE A JOINT DIRECTORY WITH ANNOTATIONS
 # OVERLAP BETWEEN NON-B TYPES
-
-
+# CHECKING NCBI FOR BIRD GENOMES 
 
 ################################# REQUIREMENTS #################################
 # A LIST OF ALL SOFTWARE USED:
@@ -27,6 +26,9 @@
 # Quadron (dockerized version 1.0.0 from https://hub.docker.com/r/kxk302/quadron)
 # circos/0.69-9
 # python/3.11.2
+# samtools/1.19.2
+# convert2bed/2.4.41
+# R/4.5.1
 
 # Download Zebra Finch genome, centromere annotation, repeat annotation, genes,
 #  from GenomeArk
@@ -42,6 +44,11 @@ wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/man
 wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/genes/bTaeGut7v0.4.v0.1.annotation.modified.longest_isoform.only_gene.gtf
 wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/genes/bTaeGut7v0.4.v0.1.annotation.modified.longest_isoform.only_intron.gtf
 wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/methylation/bTaeGut7v0.4_MT_rDNA.PBmethylation.v0.1.bw
+wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/3D/bTaeGut7v0.4_MT_rDNA.Cooltools.E1.200kbp.flipped.dip.collated.v0.1.bed
+wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/3D/bTaeGut7v0.4_MT_rDNA.Cooltools.E1.10kbp.flipped.dip.collated.v0.1.bw
+wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/PUR/bTaeGut7v0.4_MT_rDNA_MATonly_vs_GCF_000151805.1.PUR.fastga.v0.1.bed
+wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/assembly_verkko_0.1/manual_curation/bTaeGut7v0.4/mapping/v0.4_dip_hifi/v0.4_dip_hifi.pri.cov.wig
+wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/assembly_verkko_0.1/manual_curation/bTaeGut7v0.4/mapping/v0.4_dip_ont/v0.4_dip_ont.pri.cov.wig
 
 gunzip bTaeGut7v0.4_MT_rDNA.fa.gz
 cd ..
@@ -60,7 +67,7 @@ mkdir gfa_annotation
 # Set parameters
 fasta="ref/bTaeGut7v0.4_MT_rDNA.fa"
 prefix="bTaeGut7v0.4_MT_rDNA"
-# Run gfa on local scratch, convert to bed and copy files back to storage
+# Run gfa and convert to bed
 echo '#!/bin/bash
 echo "##### Start gfa"
 ~/software/non-B_gfa/gfa -seq '$fasta' -out gfa_annotation/'$prefix'  -skipGQ -skipWGET
@@ -273,3 +280,31 @@ grep ALL densities/bTaeGut7v0.4_MT_rDNA.nonB_genome_wide.txt
 #ALL 245781668 0.113636
 
 
+######################## CHECKING NCBI FOR BIRD GENOMES ########################
+# July 28, 2025
+
+# Search for "Aves" On NCBI, download table with the following columns:
+# Assembly Accession      Assembly Name   Organism Name   Organism Taxonomic ID   Organism Infraspecific Names Breed      Organism Infraspecific Names Strain     Organism Infraspecific Names Cultivar      Organism Infraspecific Names Ecotype    Organism Infraspecific Names Isolate    Organism Infraspecific Names Sex        Annotation Name Assembly Level  Assembly Release Da
+
+# Save as ~/Downloads/ncbi_dataset.tsv
+
+# GET UNIQUE TAXON ID:
+cut -f4 ~/Downloads/ncbi_dataset.tsv |sort |uniq |wc
+    1570    1572   10664
+
+# Download one version with less info and extract completeness info:
+#Assembly Accession      Assembly Name   Organism Taxonomic ID   Assembly Stats Total Number of Chromosomes      Assembly Level  WGS project accession
+cut -f3,5 ~/Downloads/ncbi_dataset-4.tsv |uniq |sort |uniq |grep Complete >NCBI_complete.txt
+cut -f3,5 ~/Downloads/ncbi_dataset-4.tsv |uniq |sort |uniq |grep Chromosome >NCBI_chromosome.txt
+cut -f3,5 ~/Downloads/ncbi_dataset-4.tsv |uniq |sort |uniq |grep Contig >NCBI_contig.txt
+cut -f3,5 ~/Downloads/ncbi_dataset-4.tsv |uniq |sort |uniq |grep Scaffold >NCBI_scaffold.txt
+
+# Number complete:
+wc -l NCBI_complete.txt
+#       1 NCBI_complete.txt
+# Number chromosome (remove complete)
+join -v1 -1 1 -2 1 <(cut -f1 NCBI_chromosome.txt) <(cut -f1 NCBI_complete.txt) |wc
+#     231     231    1485
+# Number of scaffold level (remove chromosome and complete)
+join -v1 -1 1 -2 1 <(cut -f1 NCBI_scaffold.txt) <(cut -f1 NCBI_chromosome.txt) |wc
+#    1302    1302    8916
