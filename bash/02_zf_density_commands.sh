@@ -7,6 +7,8 @@
 #   -PLOTTING DENSITIES USING CIRCOS
 # PREPARE ENRICHMENT CALCULATIONS
 #   -PRINT DENSITIES FOR TABLE
+#   -PRINT NUMBER OF MOTIFS AND BASEPAIRS
+#   -SPACER LENGTH DISTRIBUTION FOR DR, IR AND MR
 #   -GC CONTENT PER CHROMOSOME
 
 
@@ -45,7 +47,7 @@ done
 # ~~~~~~~~~~~~~~~~~~~~~~~ PLOT DENSITIES USING CIRCOS ~~~~~~~~~~~~~~~~~~~~~~~~~~
 # June 26 2025
 
-# ASsume circos is installed in ~/software/circos-0.69-9/
+# Assume circos is installed in ~/software/circos-0.69-9/
 # The circos configuration files are found in circos/
 
 # Create density and centromere band files separately for MAT and PAT
@@ -169,6 +171,61 @@ do
   done
     echo $tmp
 done
+
+
+# ~~~~~~~~~~~~~~~~~~~~ PRINT NUMBER OF MOTIFS AND BASEPAIRS ~~~~~~~~~~~~~~~~~~~~
+cd /storage/group/kdm16/default/lbs5874/ZebraFinch
+
+# Write it out with the nonB types as columns
+# Whole genome
+prefix="bTaeGut7v0.4_MT_rDNA"
+tmp="genome"
+for non_b in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z" "ALL"
+do
+  n=`wc -l final_nonB/bTaeGut7v0.4_MT_rDNA.$non_b.bed |cut -f1 -d" "`
+#  echo $n
+  len=`grep $non_b densities/${prefix}.nonB_genome_wide.txt |cut -f2 -d" "`
+#mb=`echo "scale=2; $len/1000000.00" |bc`
+  tmp=$tmp" "$n" "$len
+done
+echo $tmp
+# Per chromosome
+cat ref/${prefix}*.fa.fai |cut -f1 |grep -v "chrM" |grep -v "rDNA" |while read -r chr;
+do
+    tmp="$chr"
+    for non_b in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z" "ALL"
+    do
+      n=`grep $chr final_nonB/bTaeGut7v0.4_MT_rDNA.$non_b.bed |wc -l |cut -f1 -d" "`
+      len=`grep $chr densities/${prefix}.nonB_per_chrom.txt |grep " $non_b " |cut -f3 -d" "`
+      tmp=$tmp" "$n" "$len
+    done
+    echo $tmp
+done
+# Per group
+for group in "macro" "micro" "microdot"
+do
+  tmp="$group"
+  for non_b in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z" "ALL"
+  do
+      n=`grep -f $group.txt final_nonB/bTaeGut7v0.4_MT_rDNA.$non_b.bed |wc -l |cut -f1 -d" "`
+    len=`awk -v g=$group '($1==g){print}' densities/${prefix}.nonB_per_group.txt |grep "$non_b" |cut -f3`
+    tmp=$tmp" "$n" "$len
+  done
+  echo $tmp
+done
+
+
+# ~~~~~~~~~~~~~~~~~ CHECK THE SPACER LENGTH FOR DR, IR AND MR ~~~~~~~~~~~~~~~~~~
+# Calculate the distribution of spacer lengths, put all in one file
+
+prefix="bTaeGut7v0.4_MT_rDNA"
+echo "Count Spacer NonB" |sed 's/ /\t/g' >stats/$prefix.spacers.txt
+for nb in "DR" "IR" "MR"
+do
+ cut -f10 gfa_annotation/${prefix}_${nb}.tsv |tail -n+2 |sort |uniq -c |\
+sort -k2,2n |awk -v OFS="\t" -v nb=$nb '{print $1,$2,nb}' >>stats/$prefix.spacers.txt
+done
+
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ GC CONTENT PER CHROM ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 mkdir stats/
