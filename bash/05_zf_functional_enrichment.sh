@@ -58,6 +58,10 @@ awk -v OFS='\t' '{s=$4-1; print $1,s,$5}' ref/bTaeGut7v0.4.v0.1.annotation.modif
 grep -v "protein_coding" ref/bTaeGut7v0.4.v0.1.annotation.modified.longest_isoform.only_gene.gtf |grep -v "pseudogene" | sed 's/;/\t/g' |sed 's/gene_id=//g' |awk -v OFS='\t' '{s=$4-1; print $1,s,$5,$12,".",$7}' |sort -k1,1 -k2,2n > annotation/$prefix.nonprotcoding.bed
 
 
+for class in  "promoter" "intergenic" "intronic" "CDS" "UTR5" "UTR3" "nonprotcoding"
+do
+  mv  annotation/$class.bed  annotation/$prefix.$class.bed 
+  done 
 ############################# CALCULATE ENRICHMENT #############################
 
 prefix="bTaeGut7v0.4_MT_rDNA"
@@ -68,7 +72,7 @@ do
     len=`sort -k1,1 -k2,2n annotation/'$prefix'.'$class'.bed | mergeBed -i - |awk '"'"'{sum+=$3-$2}END{print sum}'"'"'`
     echo "Length of '$class' is $len"
     rm -f tmp.'$class'
-    cat densities/'${prefix}'.nonB_genome_wide.txt | while read -r non_b tot dens;
+    cat coverage/'${prefix}'.nonB_genome_wide.txt | while read -r non_b tot dens;
     do
         echo "looking at $non_b"
         d=`intersectBed -a <(cut -f1-3 annotation/'$prefix'.'$class'.bed |sort -k1,1 -k2,2n |mergeBed -i -) -b <(sort -k1,1 -k2,2n final_nonB/'${prefix}'.${non_b}.bed |mergeBed -i -) -wo |awk -v l=$len -v dtot=$dens '"'"'{sum+=$7}END{d=sum/l; frac=d/dtot; print d,frac}'"'"'`
@@ -76,11 +80,11 @@ do
     done
     ' | sbatch -J $class --ntasks=1 --cpus-per-task=1 --mem-per-cpu=8G --time=5:00:00 --out slurm/job.functional.$class.%j.out
 done
-# Merge after instead
-echo "Class nonB Density Enrichment_gw" |sed "s/ /\t/g" >functional/$prefix.enrichment_fullgenome.tsv
+# Merge the tmp files
+echo "Class nonB Coverage Enrichment_gw" |sed "s/ /\t/g" >functional/$prefix.enrichment.tsv
 for class in "promoter" "intergenic" "intronic" "CDS" "UTR5" "UTR3"  "nonprotcoding" 
 do
-    cat tmp.$class |sed "s/ /\t/g" >>functional/$prefix.enrichment_fullgenome.tsv
+    cat tmp.$class |sed "s/ /\t/g" >>functional/$prefix.enrichment.tsv
 done
 # Remove temp files 
 rm tmp.*
@@ -96,7 +100,7 @@ do
       len=`grep -f helpfiles/'$group'.txt annotation/'$prefix'.'$class'.bed |mergeBed -i - |awk '"'"'{sum+=$3-$2}END{print sum}'"'"'`
       echo "Length of '$class' is $len"
       rm -f tmp.'$group'.'$class'
-      cat densities/'${prefix}'.nonB_genome_wide.txt | while read -r non_b tot dens;
+      cat coverage/'${prefix}'.nonB_genome_wide.txt | while read -r non_b tot dens;
       do
           echo "looking at $non_b"
           d=`intersectBed -a <( grep -f helpfiles/'$group'.txt annotation/'$prefix'.'$class'.bed |cut -f1-3 |mergeBed -i -) -b final_nonB/'${prefix}'.${non_b}.merged.bed -wo |awk -v l=$len -v dtot=$dens '"'"'{sum+=$7}END{d=sum/l; frac=d/dtot; print d,frac}'"'"'`
@@ -107,15 +111,15 @@ do
 done
 
 # Merge the tmp files
-echo "Group Class nonB Density Enrichment_gw" |sed "s/ /\t/g" >functional/$prefix.enrichment_groups.tsv
+echo "Group Class nonB Coverage Enrichment_gw" |sed "s/ /\t/g" >functional/$prefix.enrichment.groups.tsv
 for group in "macro" "micro" "microdot"
 do
   for class in  "promoter"  "intergenic"  "intronic" "CDS" "UTR5" "UTR3" "nonprotcoding"
   do
-    cat tmp.$group.$class |sed "s/ /\t/g" >>functional/$prefix.enrichment_groups.tsv
+    cat tmp.$group.$class |sed "s/ /\t/g" >>functional/$prefix.enrichment.groups.tsv
   done
 done
-rm tmp.*
+rm tmp.m*cro*.*
 
 # ~~~~~~~~ CALCULATE ENRICHMENT USING A CHROMOSOME CATEGORY-BASED AVG ~~~~~~~~~~
 # Added September, this was not included in the paper as it doesn't make much
@@ -131,7 +135,7 @@ do
       len=`grep -f helpfiles/'$group'.txt annotation/'$prefix'.'$class'.bed |mergeBed -i - |awk '"'"'{sum+=$3-$2}END{print sum}'"'"'`
       echo "Length of '$class' is $len"
       rm -f tmp.groupavg.'$group'.'$class'
-      cat densities/'${prefix}'.nonB_per_group.txt |awk -v g='$group' '"'"'(g==$1){print}'"'"' | while read -r g non_b tot dens;
+      cat coverage/'${prefix}'.nonB_per_group.txt |awk -v g='$group' '"'"'(g==$1){print}'"'"' | while read -r g non_b tot dens;
       do
           echo "looking at $non_b"
           d=`intersectBed -a <( grep -f helpfiles/'$group'.txt annotation/'$prefix'.'$class'.bed |cut -f1-3 |mergeBed -i -) -b final_nonB/'${prefix}'.${non_b}.merged.bed -wo |awk -v l=$len -v dtot=$dens '"'"'{sum+=$7}END{d=sum/l; frac=d/dtot; print d,frac}'"'"'`
@@ -142,7 +146,7 @@ do
 done
 
 # Merge the tmp files
-echo "Group Class nonB Density Enrichment_gw" |sed "s/ /\t/g" >functional/$prefix.enrichment_groups.groupavg.tsv
+echo "Group Class nonB Coverage Enrichment_gw" |sed "s/ /\t/g" >functional/$prefix.enrichment_groups.groupavg.tsv
 for group in "macro" "micro" "microdot"
 do
   for class in  "promoter"  "intergenic"  "intronic" "CDS" "UTR5" "UTR3" "nonprotcoding"
@@ -174,12 +178,12 @@ do
   done
 done
 #Merge
-echo "Group Class Strand Density" |sed "s/ /\t/g" >functional/$prefix.G4_strand_density_groups.tsv
+echo "Group Class Strand Coverage" |sed "s/ /\t/g" >functional/$prefix.G4_strand.groups.tsv
 for group in "macro" "micro" "microdot"
 do
   for class in  "promoter"  "intronic" "CDS" "UTR5" "UTR3" "nonprotcoding"
   do
-    cat tmp.strand.$group.$class |sed "s/ /\t/g" >>functional/$prefix.G4_strand_density_groups.tsv
+    cat tmp.strand.$group.$class |sed "s/ /\t/g" >>functional/$prefix.G4_strand.groups.tsv
   done
 done
 rm tmp.strand.*
@@ -210,12 +214,12 @@ do
   done
 done
 # Merge
-echo "Group Class Strand Gene GenLen G4Len Density" |sed "s/ /\t/g" >functional/$prefix.G4_strand_density_perGene.tsv
+echo "Group Class Strand Gene GenLen G4Len Coverage" |sed "s/ /\t/g" >functional/$prefix.G4_strand.perGene.tsv
 for group in "macro" "micro" "microdot"
 do
   for class in  "promoter"  "intronic" "CDS" "UTR5" "UTR3" "nonprotcoding"
   do
-    cat tmp.strand.perGene.$group.$class |sed 's/"//g' |sed 's/;//g' >>functional/$prefix.G4_strand_density_perGene.tsv
+    cat tmp.strand.perGene.$group.$class |sed 's/"//g' |sed 's/;//g' >>functional/$prefix.G4_strand.perGene.tsv
   done
 done
 rm tmp.strand.perGene.*
@@ -236,7 +240,7 @@ for group in "macro" "micro" "microdot"
 do
   for class in "promoter" "intergenic" "intronic" "CDS" "UTR5" "UTR3" "nonprotcoding"
   do
-    num=`grep -f helpfiles/$group.txt annotation/'$prefix'.$class.bed |awk -v p=$perc '{}END{num=int(NR*(p/100)); print num}' `
+    num=`grep -f helpfiles/$group.txt annotation/$prefix.$class.bed |awk -v p=$perc '{}END{num=int(NR*(p/100)); print num}' `
     echo "we will extract $num rows from $class on $group"
     # Subsample the sequences 100 times
     echo '#!/bin/bash
@@ -266,7 +270,7 @@ do
         do
             rm -f functional/resample/tmp.'$subset'.'$class'.'$group'.$i.txt
             len=`awk '"'"'{sum+=$3-$2}END{print sum}'"'"' functional/resample/Resamp.'$subset'.'$class'.'$group'.$i.bed`
-            cat densities/'${prefix}'.nonB_genome_wide.txt |grep -v "ALL" | while read -r non_b tot dens;
+            cat coverage/'${prefix}'.nonB_genome_wide.txt |grep -v "Any" | while read -r non_b tot dens;
             do
                 d=`intersectBed -a functional/resample/Resamp.'$subset'.'$class'.'$group'.$i.bed -b final_nonB/'$prefix'.${non_b}.merged.bed -wo |awk -v l=$len -v dtot=$dens '"'"'{sum+=$7}END{d=sum/l; frac=d/dtot; print frac}'"'"'`
                 echo $i '$group' '$class' $non_b $d >>functional/resample/tmp.'$subset'.'$class'.'$group'.$i.txt
@@ -292,10 +296,10 @@ for group in "macro" "micro" "microdot"
 do
   for class in "promoter" "intergenic" "intronic" "CDS" "UTR5" "UTR3" "nonprotcoding"
   do
-      for nonb in APR DR G4 IR MR TRI STR Z
+      for nonb in APR DR G4 IR TRI STR Z
       do
-          min=`grep $class functional/summary.$subset.$rep.txt |awk -v nb=$nonb -v g=$group -v OFS="\t" '($4==nb && $2==g){print $5}' |sort -n |head -n3 |tail -n1`
-          max=`grep $class functional/summary.$subset.$rep.txt |awk -v nb=$nonb -v g=$group -v OFS="\t" '($4==nb && $2==g){print $5}' |sort -n |tail -n3 |head -n1`
+          min=`grep $class functional/$prefix.summary.$subset.$rep.txt |awk -v nb=$nonb -v g=$group -v OFS="\t" '($4==nb && $2==g){print $5}' |sort -n |head -n3 |tail -n1`
+          max=`grep $class functional/$prefix.summary.$subset.$rep.txt |awk -v nb=$nonb -v g=$group -v OFS="\t" '($4==nb && $2==g){print $5}' |sort -n |tail -n3 |head -n1`
           echo $group $class $nonb $min $max |sed "s/ /\t/g" >>functional/$prefix.minmax.$subset.$rep.96CI.txt
       done
     done
@@ -326,7 +330,7 @@ do
     do
         len=`grep -f helpfiles/'$group'.txt repeats/intronTRF/introns_${i}.bed |sort -k1,1 -k2,2n |mergeBed -i - |awk '"'"'{sum+=$3-$2}END{print sum}'"'"'`
         echo "length of $i: $len"
-        cat densities/'${prefix}'.nonB_genome_wide.txt | while read -r non_b tot dens;
+        cat coverage/'${prefix}'.nonB_genome_wide.txt | while read -r non_b tot dens;
         do
             d=`intersectBed -a <(grep -f helpfiles/'$group'.txt repeats/intronTRF/introns_${i}.bed |sort -k1,1 -k2,2n |mergeBed -i -) -b final_nonB/'$prefix'.${non_b}.merged.bed -wo |awk -v l=$len -v dtot=$dens '"'"'{sum+=$7}END{d=sum/l; frac=d/dtot; print d, frac}'"'"'`
             echo '$group' $i $non_b $d >>repeats/intronTRF/enrichment.'$group'.txt
@@ -335,11 +339,11 @@ do
     ' |sbatch -J $group -o slurm/job.intron-enrich.$group.%j.out --requeue --ntasks=1 --cpus-per-task=1 --mem-per-cpu=4G --time=10:00:00 --partition=open
 done
 # Merge
-echo "Group Subset NonB Density Enrichment_gw" |sed "s/ /\t/g" >repeats/$prefix.group_intron_enrichment.tsv
+echo "Group Subset NonB Coverage Enrichment_gw" |sed "s/ /\t/g" >repeats/$prefix.intron_enrichment.group.tsv
 for group in "macro" "micro" "microdot"
 do
   cat repeats/intronTRF/enrichment.$group.txt |sed "s/ /\t/g"
-done >>repeats/$prefix.group_intron_enrichment.tsv
+done >>repeats/$prefix.intron_enrichment.group.tsv
 
 
 # ALSO MAKE FILES WITH THE NUMBER OF TRFs / noTRFs PER CATEGORY AND COMPARTMENT
@@ -420,19 +424,19 @@ do
 done
 
 # Merge everything except intergenic
-echo "Group Class Type Score Trx" |sed 's/ /\t/g' >methylation/functional/Group.allCpG.merged.txt
+echo "Group Class Type Score Trx" |sed 's/ /\t/g' >methylation/functional/$prefix.allCpG.group.txt
 for group in "microdot" "macro" "micro"
 do
   for class in "intronic" "CDS" "UTR5" "UTR3" "promoter" "nonprotcoding"
   do
-    awk -v g=$group -v OFS="\t" '{print g,$0}' methylation/functional/G4s/$group.$class.txt |sed 's/;//g' |sed 's/"//g' >>methylation/functional/Group.allCpG.merged.txt
+    awk -v g=$group -v OFS="\t" '{print g,$0}' methylation/functional/G4s/$group.$class.txt |sed 's/;//g' |sed 's/"//g' >>methylation/functional/$prefix.allCpG.group.txt
   done
 done
 # Merge intergenic
-echo "Group Class Type Score" |sed 's/ /\t/g' >methylation/functional/Group.allCpG.intergenic.txt
+echo "Group Class Type Score" |sed 's/ /\t/g' >methylation/functional/$prefix.allCpG.intergenic.group.txt
 for group in "microdot" "macro" "micro"
 do
-  awk -v g=$group -v OFS="\t" '{print g,$0}' methylation/functional/G4s/$group.intergenic.txt |sed 's/;//g' |sed 's/"//g' >>methylation/functional/Group.allCpG.intergenic.txt
+  awk -v g=$group -v OFS="\t" '{print g,$0}' methylation/functional/G4s/$group.intergenic.txt |sed 's/;//g' |sed 's/"//g' >>methylation/functional/$prefix.allCpG.intergenic.group.txt
 done
 
 # Figure out the proportion of genes that has/doesn't have methylation
@@ -450,12 +454,35 @@ do
   done
 done
 # Merge summary
-echo "Group Class Type Trx Number" |sed 's/ /\t/g' >methylation/functional/Group.summaryCpG.merged.txt
+echo "Group Class Type Trx Number" |sed 's/ /\t/g' >methylation/functional/$prefix.summaryCpG.group.txt
 for group in "microdot" "macro" "micro"
 do
   for class in "intronic" "CDS" "UTR5" "UTR3" "promoter" "nonprotcoding"
   do
-    awk -v g=$group -v OFS="\t" '{print g,$0}' methylation/functional/G4s/$group.$class.summary.txt |sed 's/;//g' |sed 's/"//g' >>methylation/functional/Group.summaryCpG.merged.txt
+    awk -v g=$group -v OFS="\t" '{print g,$0}' methylation/functional/G4s/$group.$class.summary.txt |sed 's/;//g' |sed 's/"//g' >>methylation/functional/$prefix.summaryCpG.group.txt
   done
 done
+
+######################### A LOOK INTO THE HOX-D CLUSTER ########################
+# December 8, 2025
+
+# It seems like the HOX cluster have a lot of G4s in other species, let's see
+# how it looks here.  
+prefix="bTaeGut7v0.4_MT_rDNA"
+
+# HOXD cluster: chr7_mat:17695980-17776819 and chr7_pat:17653526-17734186
+# Make a file with these, including 1kb flanks:
+echo -e "chr7_mat\t17694980\t17777819\nchr7_pat\t17652526\t17735186" >annotation/HOXD_cluster.bed
+
+# Intersect with g4discovery 
+module load bedtools/2.31.0
+intersectBed -wao -a annotation/HOXD_cluster.bed -b <(cut -f1,2,3 final_nonB/$prefix.G4.bed) |cut -f1,2,3,7 |awk -v OFS="\t" '{if(NR==0){chr=$1; s=$2; e=$3; sum=$4}else{if($1==chr && $2==s){sum+=$4}else{print chr,s,e,sum; chr=$1; s=$2; e=$3; sum=$4}}}END{print chr,s,e,sum}' | sed "/^\s*$/d" >test.density.hoxd.bed
+# And with Quadron
+intersectBed -wao -a annotation/HOXD_cluster.bed -b <(cut -f1,2,3 final_nonB/$prefix.G4quadron.bed) |cut -f1,2,3,7 |awk -v OFS="\t" '{if(NR==0){chr=$1; s=$2; e=$3; sum=$4}else{if($1==chr && $2==s){sum+=$4}else{print chr,s,e,sum; chr=$1; s=$2; e=$3; sum=$4}}}END{print chr,s,e,sum}' | sed "/^\s*$/d" >test.density.Quadron.hoxd.bed
+
+# Print coverage per region 
+awk -v OFS="\t" '{len=$3-$2; dens=$4/len; print $1,$2,$3,len,$4,dens}' test.density.hoxd.bed
+awk -v OFS="\t" '{len=$3-$2; dens=$4/len; print $1,$2,$3,len,$4,dens}' test.density.Quadron.hoxd.bed
+
+
 

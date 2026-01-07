@@ -87,12 +87,12 @@ cat annotation/EDTA2.v0.2.bed annotation/TRF_withMers.bed annotation/Satellites.
 mkdir -p repeats/overlap
 prefix="bTaeGut7v0.4_MT_rDNA"
 module load bedtools/2.31.0
-for non_b in "IR" "TRI" "APR" "DR" "G4"  "MR" "TRI" "STR" "Z" "ALL"
+for non_b in  "G4" "APR" "DR" "DRfilt" "IR" "IRall" "MRall" "TRI" "STR" "Z" "Zgfa" "ZDNAm1" "Zseeker" "G4quadron" "Any"
 do
   echo '#!/bin/bash
-  intersectBed -a annotation/EDTA2.v0.2.bed -b <(sort -k1,1 -k2,2n final_nonB/'${prefix}'.'${non_b}'.bed |mergeBed -i - ) >repeats/overlap/'${non_b}'.TEs.bed
-  intersectBed -a annotation/TRF_withMers.bed -b <(sort -k1,1 -k2,2n final_nonB/'${prefix}'.'${non_b}'.bed |mergeBed -i - ) >repeats/overlap/'${non_b}'.TRF.bed
-  intersectBed -a annotation/Satellites.bed -b <(sort -k1,1 -k2,2n final_nonB/'${prefix}'.'${non_b}'.bed | mergeBed -i - ) >repeats/overlap/'${non_b}'.SAT.bed
+  intersectBed -a annotation/'${prefix}'.EDTA2.v0.2.bed -b <(sort -k1,1 -k2,2n final_nonB/'${prefix}'.'${non_b}'.bed |mergeBed -i - ) >repeats/overlap/'${non_b}'.TEs.bed
+  intersectBed -a annotation/'${prefix}'.TRF_withMers.bed -b <(sort -k1,1 -k2,2n final_nonB/'${prefix}'.'${non_b}'.bed |mergeBed -i - ) >repeats/overlap/'${non_b}'.TRF.bed
+  intersectBed -a annotation/'${prefix}'.Satellites.bed -b <(sort -k1,1 -k2,2n final_nonB/'${prefix}'.'${non_b}'.bed | mergeBed -i - ) >repeats/overlap/'${non_b}'.SAT.bed
   '| sbatch -J $non_b --ntasks=1 --cpus-per-task=1 --mem-per-cpu=4G --time=1:00:00 --partition=open --out slurm/job.overlap-repeats.$non_b.%j.out
 done
 
@@ -116,7 +116,7 @@ do
   echo $name
   echo '#!/bin/bash
   rm -f tmp.'$name'
-  cat densities/'${prefix}'.nonB_genome_wide.txt |grep -v "all" | while read -r non_b tot dens;
+  cat coverage/'${prefix}'.nonB_genome_wide.txt |grep -v "all" | while read -r non_b tot dens;
   do
     d=`cat repeats/overlap/${non_b}.*.bed | awk -v r='$rep' -v l='$replen' -v dtot=$dens '"'"'($4==r){sum+=$3-$2}END{if(l==0 || dtot==0){print "NA"} else{d=sum/l; frac=d/dtot; print d,frac}}'"'"'`
       echo '$rep'" "$non_b" "$d >>tmp.'$name'
@@ -124,11 +124,11 @@ do
   '| sbatch -J $rep --ntasks=1 --cpus-per-task=1 --time=1:00:00 --partition=open --out slurm/repeat-enrich.$name.%j.out
 done
 # Merge
-echo "Repeat nonB Density Enrichment_gw" |sed "s/ /\t/g" >repeats/genome_repeat_enrichment.tsv
+echo "Repeat nonB Coverage Enrichment_gw" |sed "s/ /\t/g" >repeats/${prefix}.enrichment.tsv
 cat repeats/TE_TRF_SAT_lengths.txt | while read -r rep replen;
 do
   name=`echo $rep |sed 's/\//-/g'`
-  cat tmp.$name |sed "s/ /\t/g" >>repeats/genome_repeat_enrichment.tsv
+  cat tmp.$name |sed "s/ /\t/g" >>repeats/${prefix}.enrichment.tsv
 done
 
 # The length file was ordered by hand with row numbers added to be used for
@@ -149,13 +149,13 @@ awk '{if(NR==1){chr=$1; sum=$3-$2}else{if($1==chr){sum+=$3-$2}else{print chr,sum
 
 # Get some stats on different repeat types
 # Satellites
-grep "Satellite/Satellite" functional/annotation/EDTA2.v0.2.bed |sort -k1,1 -k2,2n |mergeBed -i - |awk '{if(NR==1){chr=$1; sum=$3-$2}else{if($1==chr){sum+=$3-$2}else{print chr,sum; chr=$1; sum=$3-$2}}}END{print chr,sum;}' |sort -k1,1 |join -1 1 -2 1 - <(cat ref/bTaeGut7v0.4_MT_rDNA.fa.fai |sort -k1,1| cut -f1,2) |awk '{d=$2/$3; print $0,d}' |sed 's/ /\t/g' >repeats/satellite.per.chr.txt
+grep "Satellite/Satellite" annotation/EDTA2.v0.2.bed |sort -k1,1 -k2,2n |mergeBed -i - |awk '{if(NR==1){chr=$1; sum=$3-$2}else{if($1==chr){sum+=$3-$2}else{print chr,sum; chr=$1; sum=$3-$2}}}END{print chr,sum;}' |sort -k1,1 |join -1 1 -2 1 - <(cat ref/bTaeGut7v0.4_MT_rDNA.fa.fai |sort -k1,1| cut -f1,2) |awk '{d=$2/$3; print $0,d}' |sed 's/ /\t/g' >repeats/satellite.per.chr.txt
 # Simple repeats
-grep "Simple_repeat" functional/annotation/EDTA2.v0.2.bed |sort -k1,1 -k2,2n |mergeBed -i - |awk '{if(NR==1){chr=$1; sum=$3-$2}else{if($1==chr){sum+=$3-$2}else{print chr,sum; chr=$1; sum=$3-$2}}}END{print chr,sum;}' |sort -k1,1 |join -1 1 -2 1 - <(cat ref/bTaeGut7v0.4_MT_rDNA.fa.fai |sort -k1,1| cut -f1,2) |awk '{d=$2/$3; print $0,d}' |sed 's/ /\t/g' >repeats/simple.per.chr.txt
+grep "Simple_repeat" annotation/EDTA2.v0.2.bed |sort -k1,1 -k2,2n |mergeBed -i - |awk '{if(NR==1){chr=$1; sum=$3-$2}else{if($1==chr){sum+=$3-$2}else{print chr,sum; chr=$1; sum=$3-$2}}}END{print chr,sum;}' |sort -k1,1 |join -1 1 -2 1 - <(cat ref/bTaeGut7v0.4_MT_rDNA.fa.fai |sort -k1,1| cut -f1,2) |awk '{d=$2/$3; print $0,d}' |sed 's/ /\t/g' >repeats/simple.per.chr.txt
 # TEs
-grep -v "Satellite/Satellite" functional/annotation/EDTA2.v0.2.bed |grep -v "Simple_repeat" |grep -v "rRNA" |grep -v "unknown" |sort -k1,1 -k2,2n |mergeBed -i - |awk '{if(NR==1){chr=$1; sum=$3-$2}else{if($1==chr){sum+=$3-$2}else{print chr,sum; chr=$1; sum=$3-$2}}}END{print chr,sum;}' |sort -k1,1 |join -1 1 -2 1 - <(cat ref/bTaeGut7v0.4_MT_rDNA.fa.fai |sort -k1,1| cut -f1,2) |awk '{d=$2/$3; print $0,d}' |sed 's/ /\t/g'  >repeats/TEs.per.chr.txt
+grep -v "Satellite/Satellite" annotation/EDTA2.v0.2.bed |grep -v "Simple_repeat" |grep -v "rRNA" |grep -v "unknown" |sort -k1,1 -k2,2n |mergeBed -i - |awk '{if(NR==1){chr=$1; sum=$3-$2}else{if($1==chr){sum+=$3-$2}else{print chr,sum; chr=$1; sum=$3-$2}}}END{print chr,sum;}' |sort -k1,1 |join -1 1 -2 1 - <(cat ref/bTaeGut7v0.4_MT_rDNA.fa.fai |sort -k1,1| cut -f1,2) |awk '{d=$2/$3; print $0,d}' |sed 's/ /\t/g'  >repeats/TEs.per.chr.txt
 # UNKNOWN
-grep "unknown" functional/annotation/EDTA2.v0.2.bed |sort -k1,1 -k2,2n |mergeBed -i - |awk '{if(NR==1){chr=$1; sum=$3-$2}else{if($1==chr){sum+=$3-$2}else{print chr,sum; chr=$1; sum=$3-$2}}}END{print chr,sum;}' |sort -k1,1 |join -1 1 -2 1 - <(cat ref/bTaeGut7v0.4_MT_rDNA.fa.fai |sort -k1,1| cut -f1,2) |awk '{d=$2/$3; print $0,d}' |sed 's/ /\t/g' >repeats/unknown.per.chr.txt
+grep "unknown" annotation/EDTA2.v0.2.bed |sort -k1,1 -k2,2n |mergeBed -i - |awk '{if(NR==1){chr=$1; sum=$3-$2}else{if($1==chr){sum+=$3-$2}else{print chr,sum; chr=$1; sum=$3-$2}}}END{print chr,sum;}' |sort -k1,1 |join -1 1 -2 1 - <(cat ref/bTaeGut7v0.4_MT_rDNA.fa.fai |sort -k1,1| cut -f1,2) |awk '{d=$2/$3; print $0,d}' |sed 's/ /\t/g' >repeats/unknown.per.chr.txt
 
 
 # ~~~~~~~~~~~~~~~~~~ CALCULATE ENRICHMENT PER CHROMOSOME TYPE ~~~~~~~~~~~~~~~~~~
@@ -165,12 +165,12 @@ grep "unknown" functional/annotation/EDTA2.v0.2.bed |sort -k1,1 -k2,2n |mergeBed
 module load python/3.11.2
 for group in "macro" "micro" "microdot"
 do
-  cat annotation/EDTA2.v0.2.bed annotation/TRF_withMers.bed annotation/Satellites.bed |grep -f helpfiles/$group.txt - |python3 python/repeat_summary.py >repeats/$group.TE_TRF_SAT_lengths.txt
+  cat annotation/${prefix}.EDTA2.v0.2.bed annotation/${prefix}.TRF_withMers.bed annotation/${prefix}.Satellites.bed |grep -f helpfiles/$group.txt - |python3 python/repeat_summary.py >repeats/$group.TE_TRF_SAT_lengths.txt
 done
 
 # Run all repeat types simultaneously and merge afterwards
 prefix="bTaeGut7v0.4_MT_rDNA"
-for group in "microdot" "micro" "macro" 
+for group in "macro" # "microdot" "micro" "macro" 
 do
   cat repeats/$group.TE_TRF_SAT_lengths.txt | while read -r rep replen;
   do
@@ -178,7 +178,7 @@ do
     echo $name
     echo '#!/bin/bash
     rm -f tmp.'$group'.'$name'
-    cat densities/'${prefix}'.nonB_genome_wide.txt |grep -v "all" | while read -r non_b tot dens;
+    cat coverage/'${prefix}'.nonB_genome_wide.txt |grep -v "all" | while read -r non_b tot dens;
     do
       d=`grep -f '$group.txt' repeats/overlap/${non_b}.*.bed | awk -v r='$rep' -v l='$replen' -v dtot=$dens '"'"'($4==r){sum+=$3-$2}END{if(l==0 || dtot==0){print "NA"} else{d=sum/l; frac=d/dtot; print d,frac}}'"'"'`
         echo '$group'" "'$rep'" "$non_b" "$d >>tmp.'$group'.'$name'
@@ -188,7 +188,7 @@ do
 done
 
 # Merge (here we want to include all repeats! If file is missing, add NA!)
-echo "Group Repeat nonB Density Enrichment_gw" |sed "s/ /\t/g" >repeats/group_repeat_enrichment.tsv
+echo "Group Repeat nonB Coverage Enrichment_gw" |sed "s/ /\t/g" >repeats/${prefix}.enrichment.group.tsv
 for group in "macro" "micro" "microdot"
 do
   cat repeats/TE_TRF_SAT_lengths.txt | while read -r rep replen;
@@ -196,7 +196,7 @@ do
     name=`echo $rep |sed 's/\//-/g'`
     if test -e tmp.$group.$name
     then
-      cat tmp.$group.$name |sed "s/ /\t/g" >>repeats/group_repeat_enrichment.tsv
+      cat tmp.$group.$name |sed "s/ /\t/g" >>repeats/${prefix}.enrichment.group.tsv
     else
       echo "$group $rep APR NA NA
 $group $rep DR NA NA
@@ -206,10 +206,14 @@ $group $rep MR NA NA
 $group $rep TRI NA NA
 $group $rep G4 NA NA
 $group $rep Z NA NA
-$group $rep ALL NA NA" | sed "s/ /\t/g" >>repeats/group_repeat_enrichment.tsv
+$group $rep DRfilt NA NA
+$group $rep G4quadron NA NA
+$group $rep IRall NA NA
+$group $rep MRall NA NA
+$group $rep Zseeker NA NA
+$group $rep ZDNAm1 NA NA  
+$group $rep Zgfa NA NA  
+$group $rep Any NA NA" | sed "s/ /\t/g" >>repeats/${prefix}.enrichment.group.tsv
     fi
   done
 done
-
-
-

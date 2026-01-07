@@ -53,6 +53,12 @@ wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/ass
 gunzip bTaeGut7v0.4_MT_rDNA.fa.gz
 cd ..
 
+for t in "macro" "micro" 
+do 
+ awk -v t=$t '{print $1"\t"t}' $t.txt >>helpfiles/$prefix.chr_types.txt
+ done 
+awk -v t=$t '{print $1"\tdot"}' microdot.txt >>helpfiles/$prefix.chr_types.txt
+
 
 ############################## ANNOTATION WITH GFA #############################
 # Annnotating A-Phased repeats (APR), Direct Repeats (DR), Inverted Repeats (IR),
@@ -60,6 +66,7 @@ cd ..
 # June 12, 2025
 mkdir slurm
 mkdir gfa_annotation
+mkdir final_nonB
 
 # GFA is assumed to be installed in: 
 # ~/software/non-B_gfa/gfa
@@ -77,8 +84,86 @@ do
   echo "#####....translating $type...."
   awk -v OFS="\t" '"'"'(NR>1){s=$4-1; print $1,s,$5,$9":"$10":"$11,".",$8}'"'"' gfa_annotation/'${prefix}'_${type}.tsv >gfa_annotation'${prefix}'.$type.bed
 done
-awk -v OFS="\t" '"'"'($12==1){s=$4-1; print $1,s,$5,$9":"$10":"$11,".",$8}'"'"' gfa_annotation/'${prefix}'_MR.tsv  >/gfa_annotation/'${prefix}'.TRI.bed
 ' |sbatch -J gfa.$prefix --ntasks=1 --cpus-per-task=1 --mem-per-cpu=2G --time=2-00:00:00 -o slurm/job.gfa.zf.%j.%N.out
+
+# Change name of original IR, Z and MR files as they will not be used for 
+# the main analysis 
+mv final_nonB/${prefix}.IR.bed final_nonB/${prefix}.IRall.bed
+mv final_nonB/${prefix}.Z.bed final_nonB/${prefix}.Zgfa.bed
+mv final_nonB/${prefix}.MR.bed final_nonB/${prefix}.MRall.bed
+
+#Subset DR (not sure we will use this), IR and MR
+awk -v OFS="\t" '($9<=50 && $10<=5){s=$4-1; print $1,s,$5,$9":"$10":"$11,".",$8}' gfa_annotation/${prefix}_DR.tsv  >final_nonB/${prefix}.DRfilt.bed
+awk -v OFS="\t" '($9<=30 && $10<=10){s=$4-1; print $1,s,$5,$9":"$10":"$11,".",$8}' gfa_annotation/${prefix}_IR.tsv  >final_nonB/${prefix}.IR.bed
+# max 10bp loop, and 100% purine or pyrimidine
+awk -v OFS="\t" '($10<=10){split($13, parts, "/"); 
+    for (i=1; i<=4; i++) {
+      cnt = parts[i]
+      gsub(/[A-Z]/, "", cnt)  # remove A,C,G,T to get the numeric part
+      vals[i] = cnt + 0
+    }
+    A = vals[1]; C = vals[2]; G = vals[3]; T = vals[4];
+    total = A + C + G + T;
+    pur = A + G;
+    frac=pur/total;
+  if(frac==0 || frac==1){s=$4-1; print $1,s,$5,$9":"$10":"$11":"frac,".",$8}}' gfa_annotation/${prefix}_MR.tsv  >final_nonB/${prefix}.TRI.bed
+
+
+
+# TESTING SOME OTHER SUBSETS, NOT USED IN PAPER 
+awk -v OFS="\t" '($10<=15){s=$4-1; print $1,s,$5,$9":"$10":"$11,".",$8}' gfa_annotation/${prefix}_IR.tsv  >final_nonB/${prefix}.IR_SM15.bed
+# MR, max 15bp loop, and 100% purine or pyrimidine
+awk -v OFS="\t" '($10<=15){split($13, parts, "/"); 
+                for (i=1; i<=4; i++) {
+                  cnt = parts[i]
+                  gsub(/[A-Z]/, "", cnt)  # remove A,C,G,T to get the numeric part
+                  vals[i] = cnt + 0
+                }
+                A = vals[1]; C = vals[2]; G = vals[3]; T = vals[4];
+                total = A + C + G + T;
+                pur = A + G;
+                frac=pur/total;
+              if(frac==0 || frac==1){s=$4-1; print $1,s,$5,$9":"$10":"$11":"frac,".",$8}}' gfa_annotation/${prefix}_MR.tsv  >final_nonB/${prefix}.MR0-15.bed
+# Max 8bp loop, and min 90% purine or pyrimidine
+awk -v OFS="\t" '($10<=8){split($13, parts, "/"); 
+                for (i=1; i<=4; i++) {
+                  cnt = parts[i]
+                  gsub(/[A-Z]/, "", cnt)  # remove A,C,G,T to get the numeric part
+                  vals[i] = cnt + 0
+                }
+                A = vals[1]; C = vals[2]; G = vals[3]; T = vals[4];
+                total = A + C + G + T;
+                pur = A + G;
+                frac=pur/total;
+              if(frac<0.1 || frac>0.9){s=$4-1; print $1,s,$5,$9":"$10":"$11":"frac,".",$8}}' gfa_annotation/${prefix}_MR.tsv  >final_nonB/${prefix}.MR01-8.bed
+# This is what I think gfa meant when they defined the subset "TRI", but it 
+# seems like they have set the purine/pyrimidine content till MORE than 10% 
+# instead of LESS than 10%
+
+
+##################### ANNOTATION OF Z DNA WITH ZDNA HUNTER  ####################
+
+# ZDNA Hunter runs on a webserver located here: https://bioinformatics.ibp.cz/#/analyse/zdna
+# We uploaded the full genomes and downloaded the results as bed graph files. 
+# ZDNA Hunter outputs positions continusly for the whole genome, so we need to 
+# convert the positions to proper chromosome coordinates. Further it only takes 
+# files up to 2Gb, so I divide the primary and alternative haplotypes for zebra finch
+
+
+# Place output in the directory ZDNAHunter
+
+prefix="bTaeGut7v0.4_MT_rDNA"
+# Convert to chromosome coordinates in bed format
+module load python/3.11.2
+for part in "ZF_mat_Z" "ZF_pat_autosomes"
+do
+  python3 T2T_bird_nonB/python/remap_zdna.py -b ZDNAHunter/full.$part.model1.bedgraph -f ref/$part.fa.fai -o ZDNAHunter/$part.ZDNA1.bed
+  python3 T2T_bird_nonB/python/remap_zdna.py -b ZDNAHunter/full.$part.model2.bedgraph -f ref/$part.fa.fai -o ZDNAHunter/$part.ZDNA2.bed
+done 
+
+# Merge into one file and move to nonB directory:
+cat ZDNAHunter/ZF_*.ZDNA1.bed |sort -k1,1 -k2,2n >final_nonB/$prefix.ZDNA1.bed
+cat ZDNAHunter/ZF_*.ZDNA2.bed |sort -k1,1 -k2,2n >final_nonB/$prefix.ZDNA2.bed
 
 
 ########################### ANNOTATION WITH QUADRON ############################
@@ -125,11 +210,11 @@ done
 
 # Convert to bed
 prefix="bTaeGut7v0.4_MT_rDNA"
-rm -f Quadron_annotation/$prefix.G4.bed
+rm -f final_nonB/$prefix.G4quadron.bed
 echo $prefix
 for chr in $(cut -f1 ref/$prefix.fa.fai)
 do
-  awk -v chr=$chr -v OFS="\t" '(/^DATA/){if($5=="NA"){}else{score=$5; if(score<0){score=0}; s=$2-1; e=s+$4; print chr,s,e,$5,sprintf("%.f", score),$3}}' Quadron_annotation/$chr.out >>Quadron_annotation/$prefix.G4.bed
+  awk -v chr=$chr -v OFS="\t" '(/^DATA/){if($5=="NA"){}else{score=$5; if(score<0){score=0}; s=$2-1; e=s+$4; print chr,s,e,$5,sprintf("%.f", score),$3}}' Quadron_annotation/$chr.out >>final_nonB/$prefix.G4quadron.bed
 done
 
 
@@ -137,16 +222,20 @@ done
 mkdir final_nonB
 prefix="bTaeGut7v0.4_MT_rDNA"
 cp gfa_annotation/bTaeGut7v0.4_MT_rDNA.*.bed final_nonB/
-cp Quadron_annotation/bTaeGut7v0.4_MT_rDNA.G4.bed final_nonB/
+
 
 # AND CREATE NEW NONB FILES WITH MERGED REGIONS (THAT CONTAIN NO OVERLAPS)
-for n in "G4" "APR" "DR" "IR" "MR" "TRI" "STR" "Z" "ALL"
+for n in "G4" #"APR" "DR" "DRfilt" "IR" "IRall" "MRall" "TRI" "STR" "Zgfa" "Zseeker" "G4quadron" "ZDNAm1" "Z"
 do
  echo '#!/bin/bash
  module load bedtools/2.31.0
  sort -k1,1 -k2,2n final_nonB/'$prefix'.'${n}'.bed |mergeBed -i - >final_nonB/'$prefix'.'${n}'.merged.bed
  '| sbatch -J $n --ntasks=1 --cpus-per-task=1 --mem-per-cpu=8G --out slurm/mergeBed.$n.%j.out
  done
+
+# And a joint bed file called "Any" (Just using the chosen settings for each type)
+sort -m -k1,1 -k2,2n final_nonB/$prefix.APR.merged.bed final_nonB/$prefix.DR.merged.bed final_nonB/$prefix.IR.merged.bed final_nonB/$prefix.TRI.merged.bed final_nonB/$prefix.STR.merged.bed final_nonB/$prefix.G4.merged.bed final_nonB/$prefix.Z.merged.bed >final_nonB/$prefix.Any.bed
+mergeBed -i final_nonB/$prefix.Any.bed >final_nonB/$prefix.Any.merged.bed
 
 
 ######################### OVERLAP BETWEEN NON-B TYPES ##########################
@@ -155,55 +244,59 @@ do
 mkdir overlap
 prefix="bTaeGut7v0.4_MT_rDNA"
 # Check overlap for each chromosome separately
-cat ref/${prefix}*.fa.fai |cut -f1 |tail -n+2 |while read -r chr;
+cat ref/${prefix}*.fa.fai |cut -f1 |grep chr3_mat |while read -r chr;
 do
   echo '#!/bin/bash
   echo "Running upset for '$chr'"
   module load python/3.11.2
-  python3 python/upset_summary.py -b final_nonB/'$prefix'. -c '$chr' -o overlap/summary.'$chr'.txt
+  python3 T2T_bird_nonB/python/upset_summary.py -b final_nonB/'$prefix'. -c '$chr' -o overlap/summary.17types.'$chr'.txt
   ' | sbatch -J $chr --ntasks=1 --mem-per-cpu=6G --cpus-per-task=1 --time=1:00:00
 done
 # The longest chr2 took 3Gb of RAM and less than a minute to run.
+# When doing all 17 types, it used 5Gb and tool 1.5min
+
 
 # Merge autosomes
-cat overlap/summary.chr[0-9]*.txt |sort | awk -v OFS="\t" '{if(NR==1){type=$1; sum=$2}else{if($1==type){sum+=$2}else{print type,sum; type=$1; sum=$2}}}END{print type,sum}' > overlap/summary.autosomes.txt
+cat overlap/summary.17types.chr[0-9]*.txt |sort | awk -v OFS="\t" '{if(NR==1){type=$1; sum=$2}else{if($1==type){sum+=$2}else{print type,sum; type=$1; sum=$2}}}END{print type,sum}' > overlap/summary.17types.autosomes.txt
 # And rDNA
-cat overlap/summary.rDNA*.txt |sort | awk -v OFS="\t" '{if(NR==1){type=$1; sum=$2}else{if($1==type){sum+=$2}else{print type,sum; type=$1; sum=$2}}}END{print type,sum}' > overlap/summary.rDNA.txt
+cat overlap/summary.17types.rDNA*.txt |sort | awk -v OFS="\t" '{if(NR==1){type=$1; sum=$2}else{if($1==type){sum+=$2}else{print type,sum; type=$1; sum=$2}}}END{print type,sum}' > overlap/summary.17types.rDNA.txt
 # And chromosome types 
 for type in "macro" "micro" "microdot"
 do
   for chr in $(cat helpfiles/$type.txt)
   do
-    cat overlap/summary.$chr.txt
-  done | sort | awk -v OFS="\t" '{if(NR==1){type=$1; sum=$2}else{if($1==type){sum+=$2}else{print type,sum; type=$1; sum=$2}}}END{print type,sum}' > overlap/summary.$type.txt
+    cat overlap/summary.17types.$chr.txt
+  done | sort | awk -v OFS="\t" '{if(NR==1){type=$1; sum=$2}else{if($1==type){sum+=$2}else{print type,sum; type=$1; sum=$2}}}END{print type,sum}' > overlap/summary.17types.$type.txt
 done
 
 # PAIRWISE OVERLAP WITH FRACTION
 # To get the fraction I first need the totals for all types
+# This does not work when some of the names are overlapping 
 mkdir stats/nonB_totals
-for file in $(ls overlap/summary.*.txt)
+for file in $(ls overlap/summary.17types.*.txt)
 do
-  chr=`echo $file | cut -f2 -d"."`
+  chr=`echo $file | cut -f3 -d"."`
   echo $chr
-  echo "#NonB bp" |sed "s/ /\t/g" >stats/nonB_totals/annotated.${chr}.txt
-  for nb in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
+  echo "#NonB bp" |sed "s/ /\t/g" >stats/nonB_totals/annotated.17types.${chr}.txt
+  for nb in "APR" "DR" "DR50-5" "G4" "g4discovery" "IR" "IR30-10" "IR_SM15" "MR" "TRI" "MR01-8" "MR0-10" "MR0-15" "STR" "Z" "ZDNAHunter" "Zseeker" 
   do
-    grep $nb $file |awk -v nb=$nb '{sum+=$2}END{print nb"\t"sum}' >>stats/nonB_totals/annotated.${chr}.txt
+    grep $nb $file |awk -v nb=$nb '{sum+=$2}END{print nb"\t"sum}' >>stats/nonB_totals/annotated.17types.${chr}.txt
   done
 done
 
 # Make bed files for each chr type (this is just to simplify the next step)
+  module load bedtools/2.31.0
 mkdir final_nonB/merged_per_chrom/
 cat ref/${prefix}*.fa.fai |cut -f1 |while read -r chr;
 do
   echo $chr
-  for nb in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
+  for nb in  "APR" "DR" "DR50-5" "G4" "g4discovery" "IR" "IR30-10" "IR_SM15" "MR" "TRI" "MR01-8" "MR0-10" "MR0-15" "STR" "Z" "ZDNAHunter" "Zseeker"  #"APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
   do
     grep $chr final_nonB/$prefix.$nb.bed |sort -k1,1 -k2,2n |mergeBed -i - >final_nonB/merged_per_chrom/$chr.$nb.bed
   done
 done
 # Autosomes & rDNA
-for nb in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
+for nb in "DR50-5" "MR01-8" "MR0-10" "IR30-10" "IR_SM15" "MR0-15" "ZDNAHunter" "g4discovery" "Zseeker" #"APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
 do
   cat final_nonB/merged_per_chrom/chr[0-9]*.$nb.bed > final_nonB/merged_per_chrom/autosomes.$nb.bed
   cat final_nonB/merged_per_chrom/rDNA_*.$nb.bed > final_nonB/merged_per_chrom/rDNA.$nb.bed
@@ -211,7 +304,7 @@ done
 # Macro, micro, dot
 for type in "macro" "micro" "microdot"
 do
-  for nb in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
+  for nb in "DR50-5" "MR01-8" "MR0-10" "IR30-10" "IR_SM15" "MR0-15" "ZDNAHunter" "g4discovery" "Zseeker" #"APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
   do
     for chr in $(cat $type.txt)
     do
@@ -221,35 +314,35 @@ do
 done
 
 # Then we can combine all the types
-for file in $(ls stats/nonB_totals/annotated.*.txt )
+for file in $(ls stats/nonB_totals/annotated.17types.*.txt )
 do
-  chr=`echo $file | cut -f2 -d"."`
-  echo "Chr NB1 NB2 Ovl Frac" | sed "s/ /\t/g" >overlap/pairwise.$chr.txt
+  chr=`echo $file | cut -f3 -d"."`
+  echo "Chr NB1 NB2 Ovl Frac" | sed "s/ /\t/g" >overlap/pairwise.17types.$chr.txt
   echo '#!/bin/bash
   module load bedtools/2.31.0
 # Go through all combinations
-  for nb in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
+  for nb in "DR50-5" "MR01-8" "MR0-10" "IR30-10" "IR_SM15" "MR0-15" "ZDNAHunter" "g4discovery" "Zseeker" "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
   do
     nbbp=`grep $nb '$file' |cut -f2`
     echo "$nb has $nbbp number of bp!"
-    for nb2 in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
+    for nb2 in "DR50-5" "MR01-8" "MR0-10" "IR30-10" "IR_SM15" "MR0-15" "ZDNAHunter" "g4discovery" "Zseeker" "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
     do
         if [[ $nb != $nb2 ]]
         then
-          intersectBed -a final_nonB/merged_per_chrom/'$chr'.$nb.bed -b final_nonB/merged_per_chrom/'$chr'.$nb2.bed -wo | awk -v tot=$nbbp -v chr='$chr' -v sum=0 -v nb1=$nb -v nb2=$nb2 -v OFS="\t" '"'"'{sum+=$7}END{f=sum/tot; print chr,nb1,nb2,sum,f}'"'"' >>overlap/pairwise.'$chr'.txt
+          intersectBed -a old.final_nonB/merged_per_chrom/'$chr'.$nb.bed -b old.final_nonB/merged_per_chrom/'$chr'.$nb2.bed -wo | awk -v tot=$nbbp -v chr='$chr' -v sum=0 -v nb1=$nb -v nb2=$nb2 -v OFS="\t" '"'"'{sum+=$7}END{f=sum/tot; print chr,nb1,nb2,sum,f}'"'"' >>overlap/pairwise.17types.'$chr'.txt
         fi
     done
   done
-  ' | sbatch -J $chr --ntasks=1 --cpus-per-task=1 --mem-per-cpu=4G --time=1:00:00 --out slurm/job.pairwise-overlap.$chr.%j.%N.out
+  ' | sbatch -J $chr --ntasks=1 --cpus-per-task=1 --mem-per-cpu=4G --time=1:00:00 --out slurm/job.pairwise-overlap.17$chr.%j.%N.out
 done
 
 # Merging the groups
-echo "Region NonB Overlap" |sed 's/ /\t/g' >overlap/merged.summary.txt
-echo "Region NB1 NB2 Ovl Frac" |sed 's/ /\t/g' >overlap/merged.pairwise.txt
+echo "Region NonB Overlap" |sed 's/ /\t/g' >overlap/merged.17types.summary.txt
+echo "Region NB1 NB2 Ovl Frac" |sed 's/ /\t/g' >overlap/merged.17types.pairwise.txt
 for type in "macro" "micro" "microdot" "autosomes" "chrW_mat" "chrZ_pat"
 do
-  awk -v t=$type '{print t"\t"$0}' overlap/summary.$type.txt >>overlap/merged.summary.txt
-  awk -v t=$type '(NR>1){print $0}' overlap/pairwise.$type.txt >>overlap/merged.pairwise.txt
+  awk -v t=$type '{print t"\t"$0}' overlap/summary.17types.$type.txt >>overlap/merged.17types.summary.txt
+  awk -v t=$type '(NR>1){print $0}' overlap/pairwise.17types.$type.txt >>overlap/merged.17types.pairwise.txt
 done
 
 
@@ -278,6 +371,18 @@ less overlap/merged.pairwise.txt |grep "DR" |grep "G4" |grep "cro" |sort -k4n |c
 # Total number of non-B bases
 grep ALL densities/bTaeGut7v0.4_MT_rDNA.nonB_genome_wide.txt
 #ALL 245781668 0.113636
+
+
+################## EXTRACT SPACER AND REPEAT ARM INFORMATION ###################
+# For plotting to investigate the properties of DR, MR and IR motifs
+
+for nb in "DR" "IR" "MR"
+do
+  cut -f9,10 gfa_annotation/bTaeGut7v0.4_MT_rDNA_$nb.tsv >stats/bTaeGut7v0.4_MT_rDNA_$nb.rep-space.txt
+done
+
+# Copy locally for plotting in R
+
 
 
 ######################## CHECKING NCBI FOR BIRD GENOMES ########################

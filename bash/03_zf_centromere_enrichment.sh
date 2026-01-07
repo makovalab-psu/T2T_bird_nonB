@@ -28,10 +28,10 @@ do
   module load bedtools/2.31.0
   echo Working on '$chr'
   rm -f centromeres/'$chr'.tmp-centromere.txt
-  cat densities/'${prefix}'.nonB_genome_wide.txt |grep -v "all" | while read -r nb tot dens;
+  cat coverage/'${prefix}'.nonB_genome_wide.txt |grep -v "all" | while read -r nb tot dens;
   do
-    chrdens=`grep '$chr' densities/'${prefix}'.nonB_per_chrom.txt |grep " $nb " |cut -f4 -d" "`
-    echo "Density for '$chr' and $nb is $chrdens"
+    chrdens=`grep '$chr' coverage/'${prefix}'.nonB_per_chrom.txt |awk -v n=$nb '"'"'($2==n){print $4}'"'"'`
+    echo "Coverage for '$chr' and $nb is $chrdens"
     stats=`grep '$chr' '$cen_bed_file' |sort -k1,1 -k2,2n |intersectBed -a - -b final_nonB/'${prefix}'.$nb.merged.bed | sort -k1,1 -k2,2n | mergeBed -i - |\
     awk -v l='$cenlen' -v dtot=$dens -v dchr=$chrdens '"'"'{sum+=$3-$2}END{d=sum/l; fracgw=d/dtot; fracchr=d/dchr; print d,fracgw,fracchr}'"'"'`
     echo '$chr'" "$nb" "$stats |sed "s/ /\t/g" >>centromeres/'$chr'.tmp-centromere.txt
@@ -39,10 +39,10 @@ do
   ' | sbatch -J $chr --ntasks=1 --cpus-per-task=1 --mem-per-cpu=4G --out slurm/job.centromeric_enrichment.$chr.%j.out
 done
 #Merge
-echo "Chr nonB Density Enrichment_GW Enrichment_Chr" |sed "s/ /\t/g" >centromeres/${prefix}.centromere.txt
+echo "Chr nonB Density Enrichment_GW Enrichment_Chr" |sed "s/ /\t/g" >centromeres/${prefix}.enrichment.txt
 cat $cen_bed_file |cut -f1 |while read -r chr;
 do
-  cat centromeres/$chr.tmp-centromere.txt >> centromeres/${prefix}.centromere.txt
+  cat centromeres/$chr.tmp-centromere.txt >> centromeres/${prefix}.enrichment.txt
 done
 # Remove temporary files 
 rm centromeres/*.tmp-centromere*
@@ -98,7 +98,7 @@ do
     tmp="'$chr'"
     while read line
     do
-      cat densities/'${prefix}'.nonB_genome_wide.txt |grep -v "ALL" | while read -r non_b tot dens;
+      cat coverage/'${prefix}'.nonB_genome_wide.txt | while read -r non_b tot dens;
       do
           echo $line |sed "s/ /\t/g" >tmp.$SLURM_JOB_ID.bed
           d=`intersectBed -a tmp.$SLURM_JOB_ID.bed -b final_nonB/'$prefix'.${non_b}.merged.bed -wo |awk -v l=$c_len -v dtot=$dens '"'"'{sum+=$7}END{d=sum/l; frac=d/dtot; print frac}'"'"'`
@@ -107,21 +107,21 @@ do
       done
       cat tmp.$SLURM_JOB_ID |sed "s/ /\t/g" >>centromeres/windows/'$chr'.100rand.enrichment.tsv
     done <centromeres/windows/'$chr'.exclCen.bed
-    '| sbatch -J $schr --ntasks=1 --cpus-per-task=1 --time=5:00:00 --out slurm/job.centromeric_enrichment.$chr.%j.out
+    '| sbatch -J $chr --ntasks=1 --cpus-per-task=1 --time=5:00:00 --out slurm/job.centromeric_enrichment.$chr.%j.out
 done
 # Check if there are more or less than 120 windows
 cat slurm/job.centromeric_enrichment.chr*_*at.*.out |grep "there will be"
 
 # Merge background densities and GC
-echo "Window Chr APR DR G4 IR MR TRI STR Z" |sed 's/ /\t/g'  >centromeres/background_enrichment_merged.tsv
+echo "Window Chr G4 APR DR DRfilt IR IRall MRall TRI STR Z Zgfa ZDNAm1 Zseeker G4quadron Any" |sed 's/ /\t/g'  >centromeres/${prefix}.background.enrichment.tsv
 for file in $(ls centromeres/windows/chr*.100rand.enrichment.tsv)
 do
-  awk '{print NR,$0}' $file |sed 's/ /\t/g' >>centromeres/background_enrichment_merged.tsv
+  awk '{print NR,$0}' $file |sed 's/ /\t/g' >>centromeres/${prefix}.background.enrichment.tsv
 done
-echo "Window Chr GCcont" |sed 's/ /\t/g'  >centromeres/background_GC.tsv
+echo "Window Chr GCcont" |sed 's/ /\t/g'  >centromeres/${prefix}.background.GC.tsv
 for file in $(ls centromeres/windows/chr*.exclCen.with_GC.bed)
 do
-  awk '(NR>1){rownum=NR-1; print rownum,$1,$5}' $file |sed 's/ /\t/g' >>centromeres/background_GC.tsv
+  awk '(NR>1){rownum=NR-1; print rownum,$1,$5}' $file |sed 's/ /\t/g' >>centromeres/${prefix}.background.GC.tsv
 done
 
 # The same but compared to the per chromosome densities instead of genome-wide
@@ -137,7 +137,7 @@ do
     while read line
     do
       echo $line |sed "s/ /\t/g" >tmp.$SLURM_JOB_ID.bed
-      cat densities/'${prefix}'.nonB_per_chrom.txt |grep '$chr' |grep -v "ALL" | while read -r c non_b tot dens;
+      cat coverage/'${prefix}'.nonB_per_chrom.txt |grep '$chr' |grep -v "ALL" | while read -r c non_b tot dens;
       do
           d=`intersectBed -a tmp.$SLURM_JOB_ID.bed -b final_nonB/'$prefix'.${non_b}.merged.bed -wo |awk -v l=$c_len -v dtot=$dens '"'"'{sum+=$7}END{d=sum/l; frac=d/dtot; print frac}'"'"'`
           tmp=`echo $tmp" "$d`
@@ -148,10 +148,10 @@ do
     '| sbatch -J $chr --ntasks=1 --cpus-per-task=1 --partition=open --time=5:00:00 --out slurm/job.centromeric_enrichmentCHR.$chr.%j.out
 done
 # Merge
-echo "Window Chr APR DR G4 IR MR TRI STR Z" |sed 's/ /\t/g'  >centromeres/background_enrichmentCHR_merged.tsv
+echo "Window Chr G4 APR DR DRfilt IR IRall MRall TRI STR Z Zgfa ZDNAm1 Zseeker G4quadron Any" |sed 's/ /\t/g'  >centromeres/${prefix}.background.enrichment.CHR.tsv
 for file in $(ls centromeres/windows/chr*.100rand.enrichmentCHR.tsv)
 do
-  awk '{print NR,$0}' $file |sed 's/ /\t/g' >>centromeres/background_enrichmentCHR_merged.tsv
+  awk '{print NR,$0}' $file |sed 's/ /\t/g' >>centromeres/${prefix}.background.enrichment.CHR.tsv
 done
 
 

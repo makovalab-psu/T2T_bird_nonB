@@ -3,8 +3,8 @@
 ### CODE WRITTEN BY LINNÉA SMEDS
 
 ##### TABLE OF CONTENTS
-# CALCULATE DENTISTY
-#   -PLOTTING DENSITIES USING CIRCOS
+# CALCULATE COVERAGE
+#   -PLOTTING COVERAGE USING CIRCOS
 # PREPARE ENRICHMENT CALCULATIONS
 #   -PRINT DENSITIES FOR TABLE
 #   -PRINT NUMBER OF MOTIFS AND BASEPAIRS
@@ -12,23 +12,23 @@
 #   -GC CONTENT PER CHROMOSOME
 
 
-############################# CALCULATE DENSITY ################################
+######################## CALCULATE COVERAGE IN WINDOWS ##########################
 # June 24, 2025
 prefix="bTaeGut7v0.4_MT_rDNA"
 
 # Create genomic windows and make length file, trying both 100kb and 10kb windows
 mkdir -p windows/
-bedtools makewindows -g ref/$prefix.fa.fai -w 100000 >windows/all_100kb_windows.bed;
-bedtools makewindows -g ref/$prefix.fa.fai -w 10000 >windows/all_10kb_windows.bed;
+bedtools makewindows -g ref/$prefix.fa.fai -w 100000 >windows/$prefix.100kb_windows.bed;
+bedtools makewindows -g ref/$prefix.fa.fai -w 10000 >windows/$prefix.10kb_windows.bed;
 
-mkdir densities
+mkdir coverage
 for wind in "10kb" "100kb"
 do
-  for n in "G4" "APR" "DR" "IR" "MR" "TRI" "STR" "Z"
+  for n in  "G4" "APR" "DR" "DRfilt" "IR" "IRall" "MRall" "TRI" "STR" "Z" "ZDNAm1" "Zseeker" "G4quadron"
   do
    echo '#!/bin/bash
    module load bedtools/2.31.0
-   intersectBed -wao -a windows/all_'$wind'_windows.bed -b <(cut -f1,2,3 final_nonB/'$prefix'.'${n}'.merged.bed) | cut -f1,2,3,7 |awk -v OFS="\t" '"'"'{if(NR==0){chr=$1; s=$2; e=$3; sum=$4}else{if($1==chr && $2==s){sum+=$4}else{print chr,s,e,sum; chr=$1; s=$2; e=$3; sum=$4}}}END{print chr,s,e,sum}'"'"' | sed "/^\s*$/d" >densities/'${prefix}'.'${n}'.'$wind'.bed
+   intersectBed -wao -a windows/$prefix.'${wind}'_windows.bed -b <(cut -f1,2,3 final_nonB/'$prefix'.'${n}'.merged.bed) | cut -f1,2,3,7 |awk -v OFS="\t" '"'"'{if(NR==0){chr=$1; s=$2; e=$3; sum=$4}else{if($1==chr && $2==s){sum+=$4}else{print chr,s,e,sum; chr=$1; s=$2; e=$3; sum=$4}}}END{print chr,s,e,sum}'"'"' | sed "/^\s*$/d" >coverage/'${prefix}'.'${n}'.'$wind'.bed
    '| sbatch -J $n --ntasks=1 --cpus-per-task=1 --mem-per-cpu=8G --out slurm/density.$n.%j.out
   done
 done
@@ -36,15 +36,15 @@ done
 # For plotting, merge the data:
 for wind in "10kb" "100kb"
 do
-  echo "NonB Chr Start Stop Dens" |sed 's/ /\t/g' >densities/$prefix.merged.$wind.txt
-  for n in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z"
+  echo "NonB Chr Start Stop Coverage" |sed 's/ /\t/g' >coverage/$prefix.merged.$wind.txt
+  for n in  "G4" "APR" "DR" "DRfilt" "IR" "IRall" "MRall" "TRI" "STR" "Z" "ZDNAm1" "Zseeker" "G4quadron"
   do
-    awk -v OFS="\t" -v nb=$n '{print nb,$0}' densities/${prefix}.${n}.$wind.bed >>densities/$prefix.merged.$wind.txt
+    awk -v OFS="\t" -v nb=$n '{print nb,$0}' coverage/${prefix}.${n}.$wind.bed >>coverage/$prefix.merged.$wind.txt
   done
 done
 
 
-# ~~~~~~~~~~~~~~~~~~~~~~~ PLOT DENSITIES USING CIRCOS ~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~ PLOT COVERAGE USING CIRCOS ~~~~~~~~~~~~~~~~~~~~~~~~~~
 # June 26 2025
 
 # Assume circos is installed in ~/software/circos-0.69-9/
@@ -55,10 +55,11 @@ prefix="bTaeGut7v0.4_MT_rDNA"
 for hap in "mat" "pat"
 do
     mkdir -p circos/$hap
-    for nb in "TRI" "APR" "DR" "G4" "IR" "MR" "STR" "Z"
+    for nb in  "APR" "DR" "G4" "IR" "TRI" "STR" "Z"
     do
-        grep "_$hap" densities/$prefix.${nb}.noovl.100kb.bed |sed '/^[[:space:]]*$/d' |awk '{gsub(/chr/, "nn"); split($1,s,"_"); $3=$3-1; print s[1],$2,$3,$4}' >circos/$hap/data/${nb}.100kb.txt
+        grep "_$hap" coverage/$prefix.${nb}.100kb.bed |sed '/^[[:space:]]*$/d' |awk '{gsub(/chr/, "nn"); split($1,s,"_"); $3=$3-1; print s[1],$2,$3,$4}' >circos/$hap/data/${nb}.100kb.txt
         max=`cut -f4 -d" " circos/$hap/data/${nb}.100kb.txt |sort -nr |head -n1`
+        # Make sure the right max is set for the y scale 
     done
     grep "_$hap" ref/bTaeGut7v0.4_MT_rDNA.centromere_detector.v0.1.gff |awk '{gsub(/chr/,""); split($1,s,"_"); start=$4-1; print "nn"s[1],start,$5}' >circos/$hap/data/highlight_CEN.txt
 done
@@ -78,71 +79,70 @@ done
 ########################## ENRICHMENT CALCULATIONS #############################
 # June 26 2025
 # To calculate enrichment in a certain region, we need to have a base line to 
-# compare the density to. We can use either genome-wide density, or the density
+# compare the coverage to. We can use either genome-wide coverage, or the coverage
 # in a certain chromosome group (macro, micro, microdot), or per chromosome. 
 
 # Calculate genome-wide density to use for normalization
 prefix="bTaeGut7v0.4_MT_rDNA"
 echo '#!/bin/bash
 module load bedtools/2.31.0
-rm -f densities/'${prefix}'.nonB_genome_wide.txt
+rm -f coverage/'${prefix}'.nonB_genome_wide.txt
 totlen=`cat ref/'${prefix}'*.fa.fai | awk '"'"'{sum+=$2}END{print sum}'"'"'`
 echo "Totlen: "$totlen
-for non_b in "APR" "DR" "STR" "IR" "MR" "TRI" "G4" "Z"
+for non_b in  "G4" "APR" "DR" "DRfilt" "IR" "IRall" "MRall" "TRI" "STR" "Z" "Zgfa" "ZDNAm1" "Zseeker" "G4quadron" "Any"
 do
-  cat final_nonB/'${prefix}'.${non_b}.merged.bed | awk -v n=$non_b -v tot=$totlen '"'"'{sum+=$3-$2}END{d=sum/tot; print n, sum, d}'"'"' >>densities/'${prefix}'.nonB_genome_wide.txt
+  cat final_nonB/'${prefix}'.${non_b}.merged.bed | awk -v n=$non_b -v tot=$totlen '"'"'{sum+=$3-$2}END{d=sum/tot; print n, sum, d}'"'"' >>coverage/'${prefix}'.nonB_genome_wide.txt
 done
 ' |sbatch -J enrichment --ntasks=1 --cpus-per-task=2 --mem-per-cpu=8G --out slurm/job.enrichment.$prefix.%j.out
 
-# And all non-B combined
-prefix="bTaeGut7v0.4_MT_rDNA"
-echo '#!/bin/bash
-module load bedtools/2.31.0
-totlen=`cat ref/'${prefix}'*.fa.fai | awk '"'"'{sum+=$2}END{print sum}'"'"'`
-cat final_nonB/'${prefix}'.*.bed |sort -k1,1 -k2,2n |mergeBed -i - >final_nonB/'${prefix}'.ALL.bed
-awk -v n="ALL" -v tot=$totlen '"'"'{sum+=$3-$2}END{d=sum/tot; print n, sum, d}'"'"' final_nonB/'${prefix}'.ALL.bed  >>densities/'${prefix}'.nonB_genome_wide.txt
-' |sbatch -J enrichment --ntasks=1 --cpus-per-task=2 --mem-per-cpu=8G --out slurm/job.enrichment.$prefix.%j.out
 
-# Per chromosome density
-echo '#!/bin/bash
-module load bedtools/2.31.0
-echo "Chr NonB Bp Density" |sed "s/ /\t/g" >densities/'${prefix}'.nonB_per_chrom.txt
-cat ref/'${prefix}'*.fa.fai |cut -f1,2 |grep -v "chrM" |grep -v "rDNA" |while read -r chr len;
+# Per chromosome coverage
+cat ref/${prefix}.fa.fai |cut -f1,2 |grep -v "chrM" |grep -v "rDNA" |while read -r chr len;
 do
-    for non_b in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z" "ALL"
+  echo '#!/bin/bash
+    module load bedtools/2.31.0
+      rm -f tmp.coverage.'$chr'
+    for non_b in  "G4" "APR" "DR" "DRfilt" "IR" "IRall" "MRall" "TRI" "STR" "Z" "Zgfa" "ZDNAm1" "Zseeker" "G4quadron" "Any"
     do
-        cat final_nonB/'${prefix}'.${non_b}.bed |grep $chr |sort -k1,1 -k2,2n |mergeBed -i - | awk -v n=$non_b -v tot=$len '"'"'{sum+=$3-$2; c=$1}END{d=sum/tot; print c, n, sum, d}'"'"' >>densities/'${prefix}'.nonB_per_chrom.txt
+        cat final_nonB/'$prefix'.${non_b}.merged.bed | awk -v n=$non_b -v tot='$len' -v chr='$chr' '"'"'($1==chr){sum+=$3-$2; c=$1}END{d=sum/tot; print c, n, sum, d}'"'"' >>tmp.coverage.'$chr' 
     done
+'| sbatch -J $chr --ntasks=1 --cpus-per-task=1 --mem-per-cpu=4G --time=1:00:00 --partition=open
 done
-'| sbatch -J per_chrom --ntasks=1 --cpus-per-task=1 --mem-per-cpu=4G --time=1:00:00 --partition=open
 
-# Per chromosome category density
+# Merge all chromosomes together into one coverage file 
+echo -e "Chr\tNonB\tBp\tCoverage" >coverage/${prefix}.nonB_per_chrom.txt
+for chr in $(cat ref/${prefix}.fa.fai |cut -f1 |grep -v "chrM" |grep -v "rDNA") 
+do
+  cat tmp.coverage.${chr} | sed "s/ /\t/g" >>coverage/${prefix}.nonB_per_chrom.txt
+done
+
+# Per chromosome category coverage
 for group in "macro" "micro" "microdot"
 do
   totlen=`grep -f helpfiles/$group.txt ref/${prefix}*.fa.fai | awk '{sum+=$2}END{print sum}'`
   echo '#!/bin/bash
   module load bedtools/2.31.0
-  rm -f tmp.density.'${group}'
-  for non_b in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z" "ALL"
+  rm -f tmp.coverage.'${group}'
+  for non_b in  "G4" "APR" "DR" "DRfilt" "IR" "IRall" "MRall" "TRI" "STR" "Z" "Zgfa" "ZDNAm1" "Zseeker" "G4quadron" "Any"
   do
-      grep -f helpfiles/'$group'.txt final_nonB/'${prefix}'.${non_b}.merged.bed | awk -v g='$group '-v n=$non_b -v tot='$totlen' '"'"'{sum+=$3-$2}END{d=sum/tot; print g, n, sum, d}'"'"' >>tmp.density.'${group}'
+      grep -f helpfiles/'$group'.txt final_nonB/'${prefix}'.${non_b}.merged.bed | awk -v g='$group '-v n=$non_b -v tot='$totlen' '"'"'{sum+=$3-$2}END{d=sum/tot; print g, n, sum, d}'"'"' >>tmp.coverage.'${group}'
   done
-  '| sbatch -J per_chrom --ntasks=1 --cpus-per-task=1 --mem-per-cpu=4G --time=1:00:00 --partition=open
+  '| sbatch -J per_group --ntasks=1 --cpus-per-task=1 --mem-per-cpu=4G --time=1:00:00 --partition=open
 done
 
-# Merge all categories together into one density file 
-echo "Group NonB Bp Density" |sed "s/ /\t/g" >densities/${prefix}.nonB_per_group.txt
+# Merge all categories together into one coverage file 
+echo "Group NonB Bp Coverage" |sed "s/ /\t/g" >coverage/${prefix}.nonB_per_group.txt
 for group in "macro" "micro" "microdot"
 do
-  cat tmp.density.${group} | sed "s/ /\t/g" >>densities/${prefix}.nonB_per_group.txt
+  cat tmp.coverage.${group} | sed "s/ /\t/g" >>coverage/${prefix}.nonB_per_group.txt
 done
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~ PRINT DENSITIES FOR TABLE ~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~ PRINT COVERAGE FOR TABLE ~~~~~~~~~~~~~~~~~~~~~~~~~~
 # FOR SUPPLEMENTARY TABLE 1
 # Whole genome
 prefix="bTaeGut7v0.4_MT_rDNA"
 tmp="genome"
-for non_b in "APR" "DR" "G4" "IR" "MR" "TRI" "STR" "Z" "ALL"
+for non_b in "APR" "DR" "IR" "TRI" "STR"  "G4"  "Z" "Any" # "DRfilt" "IRall" "MRall" "G4quadron" "Zgfa" "ZDNAm1" "Zseeker" 
 do
   n=`grep $non_b densities/${prefix}.nonB_genome_wide.txt |cut -f3 -d" "`
   tmp=$tmp" "$n
