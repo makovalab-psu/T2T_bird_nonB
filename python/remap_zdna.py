@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
 ################################################################################
-# repam_zdna.py
+# remap_zdna.py
 # Written by Linnéa Smeds using the help of generative AI
-# Date: 21-August-2024
+# Date: November-2025
 # Description: Takes full genome output from ZDNA Hunter and converts the 
 # positions to chromsome coordinates. 
 ################################################################################
