@@ -5,7 +5,7 @@ The zebra finch T2T genome and its annotations, which are described in Formenti 
 
 ----
 
-Bash code is found in the directory *bash/*. Different parts of the project are separated into different bash scripts, witch descriptive names that are numbered after the order they were run. The first file ([01_zf_annotation_commands.sh](bash/01_zf_annotation_commands.sh)) contains a list of all software needed. 
+Bash code is found in the directory *bash/*. Different parts of the project are separated into different bash scripts, witch descriptive names that are numbered after the order they were run. The first file ([00_setup_commands.sh](bash/00_setup_commands.sh)) contains a list of all software needed. 
 
 Python scripts used in parts of the bash code above are found in the directory *python/*.
 
