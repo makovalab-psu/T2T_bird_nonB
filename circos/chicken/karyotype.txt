@@ -26,11 +26,11 @@ chr - nn25 25 0 4095597 vvlgrey
 chr - nn26 26 0 6534586 vvlgrey
 chr - nn27 27 0 6322964 vvlgrey
 chr - nn28 28 0 5942585 vvlgrey
-chr - nn33 33 0 4180360 vvlgrey
 chr - nn29 29 0 6839231 vvlgrey
 chr - nn30 30 0 3643476 vvlgrey
 chr - nn31 31 0 5478923 vvlgrey
 chr - nn32 32 0 3130476 vvlgrey
+chr - nn33 33 0 4180360 vvlgrey
 chr - nn34 34 0 4011625 vvlgrey
 chr - nn35 35 0 3056416 vvlgrey
 chr - nn36 36 0 3424470 vvlgrey
