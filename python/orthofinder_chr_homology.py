@@ -4,15 +4,17 @@ from collections import Counter, defaultdict
 # -------------------------
 # INPUT FILES
 # -------------------------
-ORTHOGROUPS = "orthofinder/OrthoFinder/Results_Jan05/Orthogroups/Orthogroups.tsv"
+ORTHOGROUPS = "orthofinder/OrthoFinder/Results_Jan12_1/Orthogroups/Orthogroups.tsv"
 
 gene2chr_files = {
     "bTaeGut7v0.4_MT_rDNA.noDots.proteins": "orthofinder/bTaeGut7v0.4_MT_rDNA_gene2chr.tsv",
     "chicken.v23.noDots.proteins": "orthofinder/chicken.v23_gene2chr.tsv",
     "bCalAnn1_v1.p.noDots.proteins": "orthofinder/bCalAnn1_v1.p_gene2chr.tsv",
-    "CAU-Wild1.1.noDots.proteins": "orthofinder/CAU-Wild1.1_gene2chr.tsv",
+    "IASCAAS_PekinDuck_T2T.noDots.proteins": "orthofinder/IASCAAS_PekinDuck_T2T_gene2chr.tsv",
     "OTswu.noDots.proteins": "orthofinder/OTswu_gene2chr.tsv",
     "bStrUra1.noDots.proteins": "orthofinder/bStrUra1_gene2chr.tsv",
+    "bPatFas1.hap1.noDots.proteins": "orthofinder/bPatFas1.hap1_gene2chr.tsv",
+    "bDroNov1.hap1.noDots.proteins": "orthofinder/bDroNov1.hap1_gene2chr.tsv"
 }
 
 # -------------------------

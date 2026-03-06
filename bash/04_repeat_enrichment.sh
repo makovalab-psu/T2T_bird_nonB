@@ -87,13 +87,13 @@ cat annotation/EDTA2.v0.2.bed annotation/TRF_withMers.bed annotation/Satellites.
 mkdir -p repeats/overlap
 prefix="bTaeGut7v0.4_MT_rDNA"
 module load bedtools/2.31.0
-for non_b in  "G4" "APR" "DR" "DRfilt" "IR" "IRall" "MRall" "TRI" "STR" "Z" "Zgfa" "ZDNAm1" "Zseeker" "G4quadron" "Any"
+for non_b in  "G4" "APR" "DR" "IR" "TRI" "STR" "Z" # "IRall" "MRall" "DRfilt" "Zgfa" "ZDNAm1" "Zseeker" "G4quadron" "Any"
 do
   echo '#!/bin/bash
-  intersectBed -a annotation/'${prefix}'.EDTA2.v0.2.bed -b <(sort -k1,1 -k2,2n final_nonB/'${prefix}'.'${non_b}'.bed |mergeBed -i - ) >repeats/overlap/'${non_b}'.TEs.bed
-  intersectBed -a annotation/'${prefix}'.TRF_withMers.bed -b <(sort -k1,1 -k2,2n final_nonB/'${prefix}'.'${non_b}'.bed |mergeBed -i - ) >repeats/overlap/'${non_b}'.TRF.bed
-  intersectBed -a annotation/'${prefix}'.Satellites.bed -b <(sort -k1,1 -k2,2n final_nonB/'${prefix}'.'${non_b}'.bed | mergeBed -i - ) >repeats/overlap/'${non_b}'.SAT.bed
-  '| sbatch -J $non_b --ntasks=1 --cpus-per-task=1 --mem-per-cpu=4G --time=1:00:00 --partition=open --out slurm/job.overlap-repeats.$non_b.%j.out
+  intersectBed -a annotation/'${prefix}'.EDTA2.v0.2.bed -b <(sort -k1,1 -k2,2n final_nonB/'${prefix}'.'${non_b}'.bed |mergeBed -i - ) >repeats/overlap/'${prefix}'.'${non_b}'.TEs.bed
+  intersectBed -a annotation/'${prefix}'.TRF_withMers.bed -b <(sort -k1,1 -k2,2n final_nonB/'${prefix}'.'${non_b}'.bed |mergeBed -i - ) >repeats/overlap/'${prefix}'.'${non_b}'.TRF.bed
+  intersectBed -a annotation/'${prefix}'.Satellites.bed -b <(sort -k1,1 -k2,2n final_nonB/'${prefix}'.'${non_b}'.bed | mergeBed -i - ) >repeats/overlap/'${prefix}'.'${non_b}'.SAT.bed
+  '| sbatch -J $non_b --ntasks=1 --cpus-per-task=1 --mem-per-cpu=4G --time=1:00:00 --out slurm/job.overlap-repeats.$non_b.%j.out
 done
 
 
@@ -102,7 +102,7 @@ done
 # https://raw.githubusercontent.com/makovalab-psu/T2T_primate_nonB/refs/heads/main/python/repeat_summary.py
 
 module load python/3.11.2
-cat functional/annotation/EDTA2.v0.2.bed functional/annotation/TRF_withMers.bed functional/annotation/Satellites.bed |python3 python/repeat_summary.py >repeats/TE_TRF_SAT_lengths.txt
+cat annotation/${prefix}.EDTA2.v0.2.bed annotation/${prefix}.TRF_withMers.bed functional/annotation/${prefix}.Satellites.bed |python3 python/repeat_summary.py >repeats/TE_TRF_SAT_lengths.txt
 
 
 # #################### CALCULATE ENRICHMENT IN THE REPEATS #####################
@@ -115,20 +115,20 @@ do
   name=`echo $rep |sed 's/\//-/g'`
   echo $name
   echo '#!/bin/bash
-  rm -f tmp.'$name'
-  cat coverage/'${prefix}'.nonB_genome_wide.txt |grep -v "all" | while read -r non_b tot dens;
+  rm -f tmp.repeat.'$name'
+  cat coverage/'${prefix}'.per_genome.tsv |grep -v "Any" | while read -r non_b tot dens;
   do
     d=`cat repeats/overlap/${non_b}.*.bed | awk -v r='$rep' -v l='$replen' -v dtot=$dens '"'"'($4==r){sum+=$3-$2}END{if(l==0 || dtot==0){print "NA"} else{d=sum/l; frac=d/dtot; print d,frac}}'"'"'`
-      echo '$rep'" "$non_b" "$d >>tmp.'$name'
+      echo '$rep'" "$non_b" "$d >>tmp.repeat.'$name'
   done
-  '| sbatch -J $rep --ntasks=1 --cpus-per-task=1 --time=1:00:00 --partition=open --out slurm/repeat-enrich.$name.%j.out
+  '| sbatch -J $rep --ntasks=1 --cpus-per-task=1 --time=1:00:00 --out slurm/repeat-enrich.$name.%j.out
 done
 # Merge
 echo "Repeat nonB Coverage Enrichment_gw" |sed "s/ /\t/g" >repeats/${prefix}.enrichment.tsv
 cat repeats/TE_TRF_SAT_lengths.txt | while read -r rep replen;
 do
   name=`echo $rep |sed 's/\//-/g'`
-  cat tmp.$name |sed "s/ /\t/g" >>repeats/${prefix}.enrichment.tsv
+  cat tmp.repeat.$name |sed "s/ /\t/g" >>repeats/${prefix}.enrichment.tsv
 done
 
 # The length file was ordered by hand with row numbers added to be used for
@@ -136,7 +136,7 @@ done
 
 
 # Add a number column to the length file after reorder it by hand
-awk '{print NR"\t"$0}' repeats/TE_TRF_SAT_lengths.txt >repeats/TE_TRF_SAT_lengths.ordered.txt
+awk '{print NR"\t"$0}' helpfiles/TE_TRF_SAT_lengths.ordered.txt >repeats/TE_TRF_SAT_lengths.ordered.txt
 
 
 
@@ -163,49 +163,53 @@ grep "unknown" annotation/EDTA2.v0.2.bed |sort -k1,1 -k2,2n |mergeBed -i - |awk 
 
 # First, we need length per type
 module load python/3.11.2
-for group in "macro" "micro" "microdot"
+prefix="bTaeGut7v0.4_MT_rDNA"
+for group in "dot" #"macro" "micro"
 do
-  cat annotation/${prefix}.EDTA2.v0.2.bed annotation/${prefix}.TRF_withMers.bed annotation/${prefix}.Satellites.bed |grep -f helpfiles/$group.txt - |python3 python/repeat_summary.py >repeats/$group.TE_TRF_SAT_lengths.txt
+  cat annotation/${prefix}.EDTA2.v0.2.bed annotation/${prefix}.TRF_withMers.bed annotation/${prefix}.Satellites.bed |grep -f <(grep $group helpfiles/$prefix.groups.txt|cut -f1) - |python3 T2T_bird_nonB/python/repeat_summary.py >repeats/$group.TE_TRF_SAT_lengths.txt
 done
 
 # Run all repeat types simultaneously and merge afterwards
 prefix="bTaeGut7v0.4_MT_rDNA"
-for group in "macro" # "microdot" "micro" "macro" 
+for group in "dot" "macro" "micro" #"dot"
 do
   cat repeats/$group.TE_TRF_SAT_lengths.txt | while read -r rep replen;
   do
     name=`echo $rep |sed 's/\//-/g'`
     echo $name
     echo '#!/bin/bash
-    rm -f tmp.'$group'.'$name'
-    cat coverage/'${prefix}'.nonB_genome_wide.txt |grep -v "all" | while read -r non_b tot dens;
+    rm -f tmp.repeat.'$group'.'$name'
+    cat coverage/'${prefix}'.per_genome.tsv |grep -v "Any" | while read -r non_b tot dens;
     do
-      d=`grep -f '$group.txt' repeats/overlap/${non_b}.*.bed | awk -v r='$rep' -v l='$replen' -v dtot=$dens '"'"'($4==r){sum+=$3-$2}END{if(l==0 || dtot==0){print "NA"} else{d=sum/l; frac=d/dtot; print d,frac}}'"'"'`
-        echo '$group'" "'$rep'" "$non_b" "$d >>tmp.'$group'.'$name'
+      d=`grep '$group' helpfiles/'$prefix'.groups.txt |awk '"'"'NR==FNR{a[$1];next} ($1 in a){print}'"'"' - repeats/overlap/${non_b}.*.bed | awk -v r='$rep' -v l='$replen' -v dtot=$dens '"'"'($4==r){sum+=$3-$2}END{if(l==0 || dtot==0){print "NA"} else{d=sum/l; frac=d/dtot; print d,frac}}'"'"'`
+        echo '$group'" "'$rep'" "$non_b" "$d >>tmp.repeat.'$group'.'$name'
     done
-    '| sbatch -J $rep --ntasks=1 --cpus-per-task=1 --time=1:00:00 --partition=open --out slurm/repeat-enrich.$name.%j.out
+    '| sbatch -J $rep --ntasks=1 --cpus-per-task=1 --time=1:00:00 --out slurm/repeat-enrich.$name.%j.out
   done
 done
 
 # Merge (here we want to include all repeats! If file is missing, add NA!)
 echo "Group Repeat nonB Coverage Enrichment_gw" |sed "s/ /\t/g" >repeats/${prefix}.enrichment.group.tsv
-for group in "macro" "micro" "microdot"
+for group in "macro" "micro" "dot"
 do
   cat repeats/TE_TRF_SAT_lengths.txt | while read -r rep replen;
   do
     name=`echo $rep |sed 's/\//-/g'`
-    if test -e tmp.$group.$name
+    if test -e tmp.repeat.$group.$name
     then
-      cat tmp.$group.$name |sed "s/ /\t/g" >>repeats/${prefix}.enrichment.group.tsv
+      cat tmp.repeat.$group.$name |sed "s/ /\t/g" >>repeats/${prefix}.enrichment.group.tsv
     else
       echo "$group $rep APR NA NA
 $group $rep DR NA NA
 $group $rep STR NA NA
 $group $rep IR NA NA
-$group $rep MR NA NA
 $group $rep TRI NA NA
 $group $rep G4 NA NA
-$group $rep Z NA NA
+$group $rep Z NA NA" | sed "s/ /\t/g" >>repeats/${prefix}.enrichment.group.tsv
+    fi
+  done
+done
+# Not used
 $group $rep DRfilt NA NA
 $group $rep G4quadron NA NA
 $group $rep IRall NA NA
@@ -213,7 +217,4 @@ $group $rep MRall NA NA
 $group $rep Zseeker NA NA
 $group $rep ZDNAm1 NA NA  
 $group $rep Zgfa NA NA  
-$group $rep Any NA NA" | sed "s/ /\t/g" >>repeats/${prefix}.enrichment.group.tsv
-    fi
-  done
-done
+$group $rep Any NA NA" 

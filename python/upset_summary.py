@@ -28,8 +28,8 @@ args = parser.parse_args()
 ################################################################################
 ##### Main code
 
-#nonB=["APR", "DR", "G4", "IR", "MR", "TRI", "STR", "Z"]
-nonB=["APR", "DR", "DRfilt", "G4", "G4quadron", "IR", "IRall","MRall", "TRI", "STR", "Z", "Zgfa", "Zseeker", "ZDNAm1" ]
+nonB=["APR", "DR", "G4", "IR", "TRI", "STR", "Z"]
+#nonB=["APR", "DR", "DRfilt", "G4", "G4quadron", "IR", "IRall","MRall", "TRI", "STR", "Z", "Zgfa", "Zseeker", "ZDNAm1" ]
 
 # prepare dict with positions 
 p_dict={}
