@@ -50,7 +50,7 @@ do
     module load bedtools/2.31.0
     intersectBed -a ref/v0.4_dip_'$seq'.pri.cov.bed -b coverage/'$prefix'.'$n'.'$seq'.bed -wo -nonamecheck|\
     grep -f <(grep dot helpfiles/'$prefix'.groups.txt |cut -f1) - |cut -f1-5,9 |\
-    intersectBed -a - -b compart/'$prefix'.dot.AB.10kb.bed -wao |cut -f1,5,6,10 |\
+    intersectBed -a - -b compart/'$prefix'.dot.AB.200kb.bed -wao |cut -f1,5,6,10 |\
     awk -v n='$n' '"'"'{print $1,n,$2,$3,$4}'"'"' >>tmp.compartment.cov.'$seq'.'$n'.txt
     '| sbatch -J $n.$seq --ntasks=1 --cpus-per-task=1 --time=5:00:00 --mem-per-cpu=8G --out slurm/coverage.compartment.$n.$seq.%j.out
   done
@@ -80,7 +80,7 @@ do
   for n in "G4" "APR" "DR" "IR" "TRI" "STR" "Z" "Any"
   do
     intersectBed -a coverage/$prefix.$seq.GC.dot.bed -b coverage/$prefix.$n.$seq.bed -wo |\
-    cut -f1,2,3,4,5,9 |intersectBed -a - -b compart/$prefix.dot.AB.10kb.bed -wao |\
+    cut -f1,2,3,4,5,9 |intersectBed -a - -b compart/$prefix.dot.AB.200kb.bed -wao |\
     awk -v OFS="\t" -v n=$n '{print $1,$2,$3,n,$4,$5,$6,$10}' >>coverage/$prefix.$seq.GC.nonB.dot.tsv
   done 
 done

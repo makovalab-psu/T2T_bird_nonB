@@ -158,7 +158,7 @@ conda activate of3_env
 conda install -c bioconda orthofinder
 
 # Run orthofinder
-cd /storage/group/kdm16/default/lbs5874/ZebraFinch
+
 echo '#!/bin/bash
 orthofinder -f orthofinder/ -M msa -T fasttree
 ' |sbatch -J orthofinder --ntasks=1 --cpus-per-task=6 --time=2-00:00:00 -o slurm/job.orthofinder.%j.out
@@ -193,8 +193,6 @@ python3 T2T_bird_nonB/python/orthofinder_chr_homology.py
 
 
 ######################## CHECKING NCBI FOR BIRD GENOMES ########################
-# Jan 29, 2026
-
 # Search for "Aves" On NCBI, download table with the following columns:
 # Assembly Accession      Assembly Name   Organism Name   Organism Taxonomic ID   Organism Infraspecific Names Breed      Organism Infraspecific Names Strain     Organism Infraspecific Names Cultivar      Organism Infraspecific Names Ecotype    Organism Infraspecific Names Isolate    Organism Infraspecific Names Sex        Annotation Name Assembly Level  Assembly Release Da
 

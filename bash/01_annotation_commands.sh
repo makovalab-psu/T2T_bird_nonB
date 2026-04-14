@@ -142,7 +142,7 @@ git clone https://github.com/saswat-km/g4Discovery.PanSN.git
 
 cat helpfiles/species_list.txt |while read -r sp longname prefix
 do
-  fasta=../..ref/$prefix.fa
+  fasta=../../ref/$prefix.fa
     echo "Split fasta for $sp"
     mkdir -p ref/split_fasta/$prefix
     cd ref/split_fasta/$prefix
@@ -225,13 +225,12 @@ cat helpfiles/species_list.txt |while read -r sp longname prefix
 do
 
   mkdir Quadron_annotation/$prefix
-  #for fa in $(ls [insert_full_path_here]/ref/split_fasta/$prefix/chr*.fa)
-  for fa in $(ls /storage/group/kdm16/default/lbs5874/ZebraFinch/ref/split_fasta/$prefix/chr*.fa)
+  for fa in $(ls [insert_full_path_here]/ref/split_fasta/$prefix/chr*.fa)
   do
     ls $fa
     chr=`basename $fa |sed 's/.fa//'`
     echo $chr
-    out="/storage/group/kdm16/default/lbs5874/ZebraFinch/Quadron_annotation/'$prefix'/$chr.out"
+    out="[insert_full_path_here]/Quadron_annotation/'$prefix'/$chr.out"
     echo '#!/bin/bash
     singularity exec ~/software/quadron.sif sh -c "cd /scripts/; Rscript run_quadron.R '$fa' '$out' 4 1000000"
     ' |sbatch -J $chr --ntasks=1 --cpus-per-task=2 --mem-per-cpu=4G --time=1:00:00 -o slurm/job.quadron.$chr.%j.out

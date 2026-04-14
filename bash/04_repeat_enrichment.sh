@@ -18,7 +18,8 @@ mkdir annotation
 # we merge them into one big annotation file.
 
 # EDTA2 file (Extensive de-novo TE Annotator version 2)
-zcat ref/bTaeGut7v0.4_MT_rDNA.EDTA2.v0.2.gtf.gz |grep -v "##" |\
+prefix="bTaeGut7v0.4_MT_rDNA"
+zcat ref/${prefix}.EDTA2.v0.2.gtf.gz |grep -v "##" |\
 awk -v OFS="\t" -F'\t' '{split($9, a, ";");
     name = ""; class = "";
     for (i in a) {
@@ -31,15 +32,15 @@ awk -v OFS="\t" -F'\t' '{split($9, a, ";");
             class = c[2];
         }
       }
-      s=$4-1; print $1,s,$5,class,$3,$7}' >annotation/EDTA2.v0.2.bed
+      s=$4-1; print $1,s,$5,class,$3,$7}' >annotation/EDTA2.$prefix.v0.2.bed
 
-#There are both "LTR/unknown" and "LTR/Unknown" in this file! Merge them into
+# There are both "LTR/unknown" and "LTR/Unknown" in this file! Merge them into
 # one:
- sed 's/LTR\/unknown/LTR\/Unknown/g' annotation/EDTA2.v0.2.bed >edta.tmp
- mv edta.tmp annotation/EDTA2.v0.2.bed
+ sed 's/LTR\/unknown/LTR\/Unknown/g' annotation/EDTA2.$prefix.v0.2.bed >edta.tmp
+ mv edta.tmp annotation/EDTA2.$prefix.v0.2.bed
 
 # TRFs; add how many basepairs each repeat unit is, and group into categories
- cat ref/bTaeGut7v0.4_MT_rDNA.trf.sorted.v0.1.bed |\
+ cat ref/${prefix}.trf.sorted.v0.1.bed |\
   awk -v OFS="\t" '{l=length($7);
       if(l<5){g="1-4mer"}
       else if(l>=5 && l<11){g="5-10mer"}

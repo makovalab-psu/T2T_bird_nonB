@@ -102,23 +102,72 @@ do
   cd ../..
 done
 
+# RERUN ZEBRA FINCH WITH PRIMARY (INCL BOTH SEX CHROMs) AND SECONDARY
+prefix="bTaeGut7v0.4_MT_rDNA"
+mkdir circos/pri
+mkdir circos/alt
+grep -E '_mat|Z_pat' ref/$prefix.fa.fai | sed "s/_mat//g" | sed "s/_pat//g" |awk '{gsub(/chr/,""); print "chr - nn"$1,$1,"0",$2,"vvlgrey"}' |sort -k4,4n >circos/pri/karyotype.txt 
+grep '_pat' ref/$prefix.fa.fai |grep -v "Z_pat" | sed "s/_pat//g" |awk '{gsub(/chr/,""); print "chr - nn"$1,$1,"0",$2,"vvlgrey"}' |sort -k4,4n >circos/alt/karyotype.txt 
+
+for hap in "pri" "alt"
+do
+    dir="circos/$hap/"
+    cp -r circos/template/* $dir/ 
+     # change order so chrW and chrZ is last
+    grep -v "nnZ" $dir/karyotype.txt |grep -v "nnW" >tmp
+    grep "nnW" $dir/karyotype.txt >>tmp
+    grep "nnZ" $dir/karyotype.txt >>tmp
+    mv tmp $dir/karyotype.txt
+done 
+
+for nb in  "APR" "DR" "G4" "IR" "TRI" "STR" "Z"
+do
+  # PRI
+  dir="circos/pri/"
+  grep  -E '_mat|Z_pat' coverage/$prefix.${nb}.100kb.bed |sed '/^[[:space:]]*$/d' |awk '{gsub(/chr/, "nn"); split($1,s,"_"); $3=$3-1; print s[1],$2,$3,$4}' >$dir/data/${nb}.100kb.txt
+  max=`cut -f4 -d" " $dir/data/${nb}.100kb.txt |sort -nr |head -n1`
+  echo "will replace max = $nb with max = $max"
+  sed -i'' -e "s/max = $nb/max = $max/" $dir/circos_halfInnerCircle.conf
+  grep -E '_mat|Z_pat' ref/bTaeGut7v0.4_MT_rDNA.centromere_detector.v0.1.gff |awk '{gsub(/chr/,""); split($1,s,"_"); start=$4-1; print "nn"s[1],start,$5}' >$dir/data/highlight_CEN.txt
+  # ALT
+  dir="circos/alt/"
+  grep  '_pat' coverage/$prefix.${nb}.100kb.bed |grep -v "Z_pat" |sed '/^[[:space:]]*$/d' |awk '{gsub(/chr/, "nn"); split($1,s,"_"); $3=$3-1; print s[1],$2,$3,$4}' >$dir/data/${nb}.100kb.txt
+  max=`cut -f4 -d" " $dir/data/${nb}.100kb.txt |sort -nr |head -n1`
+  echo "will replace max = $nb with max = $max"
+  sed -i'' -e "s/max = $nb/max = $max/" $dir/circos_halfInnerCircle.conf
+  sed -i'' -e "s/nnZ/nn37/" $dir/ideogram.conf
+  grep '_pat' ref/bTaeGut7v0.4_MT_rDNA.centromere_detector.v0.1.gff |grep -v "Z_pat" |awk '{gsub(/chr/,""); split($1,s,"_"); start=$4-1; print "nn"s[1],start,$5}' >$dir/data/highlight_CEN.txt
+done
+
+# Plot with
+for hap in "pri" "alt"
+do
+  cd circos/${hap}/
+  ~/software/circos-0.69-9/bin/circos -conf circos_halfInnerCircle.conf
+  mv circos.png ${hap}_circos.png
+  cp ${hap}_circos.png ~/Downloads/
+  cd ../..
+done
+
+
 # Centromeres for most chicken chromosome were kindly privided by Luohao Xu. 
 mv helpfiles/chicken.CEN.bed ref/
 
 # THE OTHER SPECIES (ONLY CHICKEN HAS CENTROMERE INFO)
-cat helpfiles/species_list.txt |grep -v zebra |grep -v chicken |while read -r sp longname prefix
+cat helpfiles/species_list.txt |grep chicken |while read -r sp longname prefix
 do
   dir="circos/$sp/"
   mkdir -p $dir
   cp -r circos/template/* $dir/
   # Create circos karyotype, nonB density and centromere band files
-  # BUT skip chrW for chicken
   grep "chr" ref/$prefix.fa.fai | awk '{gsub(/chr/,""); print "chr - nn"$1,$1,"0",$2,"vvlgrey"}' |sort -k4,4n >$dir/karyotype.txt
+
   if [ "$sp" == "chicken" ]; then
     echo "Special for chicken"
-    grep "chr" ref/$prefix.fa.fai | grep -v "chrW" | awk '{gsub(/chr/,""); print "chr - nn"$1,$1,"0",$2,"vvlgrey"}' |sort -k4,4n >$dir/karyotype.txt 
-     # Centromeres
-    cat ref/$prefix.CEN.bed |grep -v "chrW" |awk '{gsub(/chr/,""); print "nn"$1,$2,$3}' >$dir/data/highlight_CEN.txt
+    # Optionally, skip chrW for chicken (used for preprint)
+    # grep "chr" ref/$prefix.fa.fai | grep -v "chrW" | awk '{gsub(/chr/,""); print "chr - nn"$1,$1,"0",$2,"vvlgrey"}' |sort -k4,4n >$dir/karyotype.txt 
+    # Centromeres
+    cat ref/$prefix.CEN.bed |awk '{gsub(/chr/,""); print "nn"$1,$2,$3}' >$dir/data/highlight_CEN.txt
   else
     # Remove centromere highlights from all but chicken
      sed -i'' -e "s/show_highlights = yes/show_highlights = no/" $dir/circos_halfInnerCircle.conf
