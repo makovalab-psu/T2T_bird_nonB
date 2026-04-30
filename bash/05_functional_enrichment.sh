@@ -480,53 +480,6 @@ do
     done
   done
 done 
---account=kdm16_sc_default --partition=sla-prio
-
-
-######### TESTING, REMOVE 
-# BEFORE:
- head tmp.group.bTaeGut7v0.4_MT_rDNA.dot.introns
-zebra_finch dot introns APR 0.0200092 3.48963
-zebra_finch dot introns DR 0.0919522 3.81054
-zebra_finch dot introns STR 0.0138861 1.12899
-zebra_finch dot introns IR 0.0325626 1.02102
-zebra_finch dot introns TRI 0.00278236 1.14661
-zebra_finch dot introns G4 0.0562111 4.12571
-zebra_finch dot introns Z 0.000853623 0.865961
-zebra_finch dot introns Any 0.168652 2.23097
-
-head tmp.group.chicken.v23.dot.introns
-chicken dot introns APR 0.0188764 3.07243
-chicken dot introns DR 0.250148 10.2212
-chicken dot introns STR 0.0299511 1.93813
-chicken dot introns IR 0.0206135 0.75255
-chicken dot introns TRI 0.00386724 1.19675
-chicken dot introns G4 0.252303 14.9569
-chicken dot introns Z 0.00134522 0.943836
-chicken dot introns Any 0.42789 5.61098
-
-# AFTER 
-zebra_finch dot introns APR 0.0484317 8.44657
-zebra_finch dot introns DR 0.234337 9.71102
-zebra_finch dot introns STR 0.0189764 1.54284
-zebra_finch dot introns IR 0.0335849 1.05308
-zebra_finch dot introns TRI 0.00291905 1.20294
-zebra_finch dot introns G4 0.143902 10.5619
-zebra_finch dot introns Z 0.000575377 0.583693
-zebra_finch dot introns Any 0.359475 4.75522
-
-chicken dot introns APR 0.0188764 3.07243
-chicken dot introns DR 0.250148 10.2212
-chicken dot introns STR 0.0299511 1.93813
-chicken dot introns IR 0.0206135 0.75255
-chicken dot introns TRI 0.00386724 1.19675
-chicken dot introns G4 0.252303 14.9569
-chicken dot introns Z 0.00134522 0.943836
-chicken dot introns Any 0.42789 5.61098
-
- len=`grep $group helpfiles/$prefix.groups.txt |awk 'NR==FNR{a[$1];next} ($1 in a){sum+=$3-$2}END{print sum}' - annotation/$prefix.$class.merged.bed`
-
- intersectBed -a <(grep $group helpfiles/$prefix.groups.txt|awk 'NR==FNR{a[$1];next} ($1 in a){print}' - annotation/$prefix.$class.merged.bed) -b final_nonB/${prefix}.${non_b}.merged.bed -wo -nonamecheck |awk -v l=$len -v dtot=$dens '{sum+=$7}END{d=sum/l; frac=d/dtot; print sum, l, d,frac}'
 
 
 # Merge the tmp files
@@ -923,14 +876,6 @@ do
   grep $group helpfiles/$prefix.groups.txt |cut -f1 |grep -f - annotation/$prefix.PBmethylation.v0.1.bed >methylation/$group.methylation.bed
 done
 
-# +++++++++++ TESTING 
-head methylation/$group.methylation.bed
-chr16_mat       25      26      7.4
-chr16_mat       91      92      8.3
-chr16_mat       21120   21121   59.1
-chr16_mat       21233   21234   61.8
-chr16_mat       21240   21241   55.2
-
 
 # First I want to extract all G4s within functional regions, and the functional
 # regions with G4s removed. Here, I don't merge overlapping genes because I want 
@@ -952,14 +897,6 @@ do
   intersectBed -a annotation/$prefix.$class.bed -b final_nonB/$prefix.G4.bed -nonamecheck |sort -k1,1 -k2,2n |mergeBed -i - >annotation/G4s/$class.onlyG4s.bed
 done 
 
-head annotation/G4s/$class.exclG4s.bed
-chr10_mat       236728  237728  "chr10_mat_egapxtmp_032076"     .       +
-chr10_mat       286799  287204  "chr10_mat_egapxtmp_032078"     .       +
-chr10_mat       379545  379700  "chr10_mat_egapxtmp_032074"     .       -
-chr10_mat       379718  379752  "chr10_mat_egapxtmp_032074"     .       -
-chr10_mat       379780  379806  "chr10_mat_egapxtmp_032074"     .       -
-chr10_mat       379825  379992  "chr10_mat_egapxtmp_032074"     .       -
-chr10_mat       380019  380419  "chr10_mat_egapxtmp_032074"     .       -
 
 # Make a list with all methylated sites within those regions. 
 # We still keep overlaps so we can get the mean and median per gene later 
@@ -1008,7 +945,6 @@ do
   awk -v g=$group -v OFS="\t" '{print g,$0}' methylation/G4s/$group.intergenic.txt |sed 's/;//g' |sed 's/"//g' >>methylation/$prefix.allCpG.intergenic.group.txt
 done
 
-# I THINK THIS IS WRONG!!!  OR IS IT THE R CODE??
 # Figure out the proportion of genes that has/doesn't have methylation
 prefix="bTaeGut7v0.4_MT_rDNA"
 for group in  "macro" "micro" "dot"
@@ -1029,7 +965,6 @@ done
 
 # FOR TESTING 
 intersectBed -a annotation/G4s/$class.exclG4s.bed -b methylation/$group.methylation.bed -wao |sort -k4,4 |awk -v OFS="\t" -v cl=$class -v g=$group '{if(NR==1){trx=$4; sum=$NF}else{if(trx==$4){sum+=$NF}else{print g,cl,"background",$4,sum; trx=$4; sum=$NF}}}END{print g,cl,"background",$4,sum;}' 
-
 
 # Merge summary
 echo "Group Class Type Trx Number" |sed 's/ /\t/g' >methylation/$prefix.summaryCpG.group.txt
@@ -1110,18 +1045,6 @@ done
 cut -f1,5 repeats/intronTRF/$prefix.introns_TRF.bed |sed 's/-mer//g' >repeats/$prefix.introns_TRF.lengths.tsv
 
 
-############################ A LOOK INTO THE PEAK IN PAR 
-2997878 3175298 chrW_mat_egapxtmp_012538 SAME AS CHRZ: 3110378 3267990 egapxtmp_014755  LOC115491045
-3197367 3241072 chrW_mat_egapxtmp_012674 SAME AS CHRZ egapxtmp_014312 methyl-CpG-binding LOC121468119
-3261203 3295132 chrW_mat_egapxtmp_012513 SAME AS CHRZ egapxtmp_013322 SMAD4
-
-rna-XM_072922124.1
-rna-XM_072922370.1
-rna-XM_072922461.1
-
-OG0000035       rna-XM_027446404.3, rna-XM_038171393.2, rna-XM_038171394.2, rna-XM_038171395.2, rna-XM_038171396.2, rna-XM_038171397.2, rna-XM_038171398.2, rna-XM_038171399.2, rna-XM_038171401.2, rna-XM_038171402.2, rna-XM_038171403.2, rna-XM_038171404.2, rna-XM_038171405.2, rna-XM_038171406.2, rna-XM_038171407.2, rna-XM_038171408.2, rna-XM_038171409.2, rna-XM_038171410.2, rna-XM_038171411.2, rna-XM_038171412.2, rna-XM_038171413.2, rna-XM_038171415.2, rna-XM_072031579.1, rna-XM_072031581.1, rna-XM_072031582.1      OTA110970.1, OTA110970.2, OTA110970.3   rna-XM_030467039.1, rna-XM_030467040.1, rna-XM_030467041.1, rna-XM_030467042.1, rna-XM_030467043.1, rna-XM_030467044.1, rna-XM_030467045.1, rna-XM_030467046.1, rna-XM_030467048.1, rna-XM_030467049.1, rna-XM_030467050.1      rna-XM_064500908.1, rna-XM_064500909.1, rna-XM_064500911.1, rna-XM_064500912.1, rna-XM_064500913.1, rna-XM_064500914.1, rna-XM_064500915.1, rna-XM_064500916.1, rna-XM_064500917.1, rna-XM_064500918.1, rna-XM_064500919.1, rna-XM_064500920.1, rna-XM_064500922.1, rna-XM_064500923.1, rna-XM_064500924.1, rna-XM_064500925.1, rna-XM_064500926.1, rna-XM_064502711.1, rna-XM_064502712.1, rna-XM_064502713.1, rna-XM_064502714.1, rna-XM_064502715.1, rna-XM_064502717.1, rna-XM_064502718.1, rna-XM_064502719.1, rna-XM_064502720.1, rna-XM_064502721.1, rna-XM_064502722.1, rna-XM_064502723.1, rna-XM_064502724.1, rna-XM_064502725.1, rna-XM_064502726.1, rna-XM_064502728.1, rna-XM_064502729.1  rna-XM_065860012.2, rna-XM_065860013.2, rna-XM_065860014.2, rna-XM_065860015.2, rna-XM_065860016.2, rna-XM_065860018.2, rna-XM_065860019.2, rna-XM_065860020.2, rna-XM_065860021.2, rna-XM_065860022.2, rna-XM_065860023.2, rna-XM_065860024.2, rna-XM_065860026.2, rna-XM_065860027.2, rna-XM_065860029.2, rna-XM_065860030.2, rna-XM_065860031.2, rna-XM_065860032.2, rna-XM_065860033.2, rna-XM_065860034.2, rna-XM_065860035.2, rna-XM_065860961.2, rna-XM_065860963.2, rna-XM_065860964.2, rna-XM_065860965.2, rna-XM_065860966.2, rna-XM_065860967.2, rna-XM_065860968.2, rna-XM_065860969.2, rna-XM_065860970.2, rna-XM_065860971.2, rna-XM_065860972.2, rna-XM_065860975.2, rna-XM_065860976.2, rna-XM_065860977.2, rna-XM_065860978.2, rna-XM_065860979.2, rna-XM_065860980.2, rna-XM_065860981.2, rna-XM_065860982.2, rna-XM_065860985.2, rna-XM_071801607.1, rna-XM_071801609.1, rna-XM_071801610.1, rna-XM_071801611.1, rna-XM_071802185.1, rna-XM_071802187.1, rna-XM_071802189.1  rna-XM_074856951.1, rna-XM_074856952.1, rna-XM_074856953.1, rna-XM_074856954.1, rna-XM_074856955.1, rna-XM_074856956.1, rna-XM_074856957.1, rna-XM_074856958.1, rna-XM_074856959.1, rna-XM_074856961.1, rna-XM_074856962.1, rna-XM_074856963.1, rna-XM_074856964.1, rna-XM_074856965.1  rna-XM_072922118.1, rna-XM_072922119.1, rna-XM_072922120.1, rna-XM_072922121.1, rna-XM_072922122.1, rna-XM_072922123.1, rna-XM_072922124.1, rna-XM_072922125.1, rna-XM_072922987.1, rna-XM_072922988.1, rna-XM_072922989.1, rna-XM_072922990.1, rna-XM_072922991.1, rna-XM_072922992.1, rna-XM_072922993.1, rna-XM_072922994.1, rna-XM_072922995.1, rna-XM_072922996.1, rna-XM_072922997.1, rna-XM_072922998.1, rna-XM_072922999.1      ck_00007627-RA
-OG0011494       rna-XM_027446977.3      OTA116480.1             rna-XM_026118876.2, rna-XM_064501712.1  rna-XM_065859953.2, rna-XM_065860795.2  rna-XM_074856828.1      rna-XM_072922370.1, rna-XM_072923035.1, rna-XM_072923036.1
-OG0003050       rna-XM_072031718.1, rna-XM_072031719.1  OTA111180.1     rna-XM_030468292.1, rna-XM_030468293.1, rna-XM_030468294.1      rna-XM_064500198.1, rna-XM_064500199.1, rna-XM_064501798.1, rna-XM_064501799.1  rna-XM_065859877.2, rna-XM_065860262.2, rna-XM_071801653.1, rna-XM_071801654.1, rna-XM_071801655.1, rna-XM_071801656.1, rna-XM_071802447.1, rna-XM_071802449.1, rna-XM_071802450.1      rna-XM_074857134.1, rna-XM_074857135.1  rna-XM_032744682.3, rna-XM_032744685.1, rna-XM_072922461.1, rna-XM_072922953.1  ck_00007625-RA
 
 
 

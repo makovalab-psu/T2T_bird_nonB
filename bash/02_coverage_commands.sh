@@ -329,33 +329,6 @@ done
 
 
 
-
-Group   NonB    Bp      Coverage
-macro   APR     6907942 0.00479662
-macro   DR      19542669        0.0135697
-macro   G4      8922817 0.00619567
-macro   IR      45793751        0.0317975
-macro   TRI     3448355 0.00239441
-macro   STR     15924025        0.011057
-macro   Z       1420599 0.000986411
-macro   Any     87448226        0.0607208
-micro   APR     2177569 0.0042814
-micro   DR      14555122        0.0286173
-micro   G4      9093253 0.0178786
-micro   IR      16172971        0.0317983
-micro   TRI     1148985 0.00225906
-micro   STR     6957555 0.0136795
-micro   Z       524749  0.00103173
-micro   Any     42172980        0.0829178
-dot     APR     3316279 0.0154941
-dot     DR      18089157        0.0845149
-dot     G4      11449333        0.0534927
-dot     IR      7008734 0.0327457
-dot     TRI     650909  0.00304113
-dot     STR     3718729 0.0173744
-dot     Z       186347  0.000870637
-dot     Any     33871462        0.158252
-
 # ~~~~~~~~~~~~~~~~~~~~~~~~~ PRINT COVERAGE FOR TABLE ~~~~~~~~~~~~~~~~~~~~~~~~~~
 # FOR SUPPLEMENTARY TABLE 1
 prefix="bTaeGut7v0.4_MT_rDNA"

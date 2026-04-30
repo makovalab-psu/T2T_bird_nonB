@@ -210,12 +210,3 @@ $group $rep Z NA NA" | sed "s/ /\t/g" >>repeats/${prefix}.enrichment.group.tsv
     fi
   done
 done
-# Not used
-$group $rep DRfilt NA NA
-$group $rep G4quadron NA NA
-$group $rep IRall NA NA
-$group $rep MRall NA NA
-$group $rep Zseeker NA NA
-$group $rep ZDNAm1 NA NA  
-$group $rep Zgfa NA NA  
-$group $rep Any NA NA" 
