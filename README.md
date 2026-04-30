@@ -1,7 +1,7 @@
 # Non-canonical DNA in bird T2T genomes
 Code to run the analysis in the above paper (Smeds et al., 2025, bioRxiv: [https://doi.org/10.1101/2025.10.17.683159](https://doi.org/10.1101/2025.10.17.683159)), written by Linnéa Smeds.
 
-The zebra finch T2T genome and its annotations, which are described in Formenti et al., 2025, bioRxiv ([https://doi.org/10.1101/2025.10.14.682431](https://doi.org/10.1101/2025.10.14.682431)), can be found [here](https://genomeark.s3.amazonaws.com/index.html?prefix=species/Taeniopygia_guttata/bTaeGut7/). The non-B DNA motifs annotations described in this study are uploaded [here](https://genomeark.s3.amazonaws.com/index.html?prefix=species/Taeniopygia_guttata/bTaeGut7/manuscript/annotations/nonB/).
+The zebra finch T2T genome and its annotations, which are described in Formenti et al., 2025, bioRxiv ([https://doi.org/10.1101/2025.10.14.682431](https://doi.org/10.1101/2025.10.14.682431)), can be found [here](https://genomeark.s3.amazonaws.com/index.html?prefix=species/Taeniopygia_guttata/bTaeGut7/). The non-B DNA motifs annotations described in this study are uploaded [here](https://zenodo.org/records/19225047).
 
 ----
 
