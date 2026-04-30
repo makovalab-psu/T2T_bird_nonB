@@ -23,7 +23,7 @@ viridis_colors <- viridis(7)
 ################################################################################
 
 # DEFINE COLORS 
-type_col=c("#440154","#9460a1", "#e3cfe8", "lightgray")
+#type_col=c("#440154","#9460a1", "#e3cfe8", "lightgray")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # function for plotting 
@@ -35,9 +35,9 @@ make_boxplot <- function(data1, data2) {
   groups <- as.character(unique(droplevels(data1$Group)))
   comparisons <- combn(groups, 2, simplify = FALSE)
   
-  p<-ggplot(data1, aes(x=Group, y=Coverage*100, fill=Group, color=Group))+
+  p<-ggplot(data1, aes(x=Group, y=Coverage*100, fill=Group))+
     geom_hline(data = data2, aes(yintercept = Coverage*100), linetype="dashed", color = "red3")+
-    geom_boxplot(show.legend=TRUE, alpha=0.9)+
+    geom_boxplot(show.legend=TRUE, alpha=0.9, color="black")+
     facet_wrap(vars(NonB), ncol=9, scales="free_y")+
     scale_fill_manual(values=type_col)+
     scale_color_manual(values=type_col)+
@@ -81,10 +81,10 @@ make_spboxplot <- function(data1, data2) {
   groups <- unique(as.character(data1$Group))
   comparisons <- combn(groups, 2, simplify = FALSE)
   
-  p<-ggplot(data1, aes(x=Group, y=Coverage*100, fill=Group, color=Group))+
+  p<-ggplot(data1, aes(x=Group, y=Coverage*100, fill=Group))+
     geom_hline(data = data2, aes(yintercept = Coverage*100), linetype="dashed", color = "red3")+
-    geom_boxplot(show.legend=TRUE, alpha=0.9)+
-    facet_wrap(~Species, ncol=8)+
+    geom_boxplot(show.legend=TRUE, alpha=0.9, color="black")+
+    facet_wrap(~Names, ncol=8)+
     scale_fill_manual(values=type_col)+
     scale_color_manual(values=type_col)+
     stat_compare_means(
@@ -98,7 +98,7 @@ make_spboxplot <- function(data1, data2) {
     labs(x="", y="Coverage (%)", scale="free_y") +
     theme(panel.background = element_rect(fill = 'white', colour="black"),
           strip.background = element_rect(fill = 'white', colour="white"),
-          strip.text = element_text(size=12),
+          strip.text = element_text(size=10),
           panel.grid = element_blank(),
           legend.margin = margin(0,0,0,0),
           plot.margin = margin(1,1,0,1),
@@ -139,8 +139,8 @@ for (i in 1:length(sptib$V3)){
   # Make tibbles 
   covtib<-covfile %>% read.table(header=TRUE) %>% as_tibble()
   gwcovtib<-gwcovfile %>% read.table(header=FALSE) %>% as_tibble() %>% 
-    rename(NonB=V1, Bp=V2, Coverage=V3) 
-  gwcovtib$NonB <- factor(gwcovtib$NonB, levels=c("Any","APR", "DR", "STR", "IR","TRI", "G4", "Z"))
+    rename(NonB=V1, Bp=V2, Coverage=V3) %>% mutate(NonB=if_else(NonB=="Any", "All", NonB))
+  gwcovtib$NonB <- factor(gwcovtib$NonB, levels=c("All","APR", "DR", "STR", "IR","TRI", "G4", "Z"))
   gwcovtib <- gwcovtib %>% drop_na()
   typetib <- grfile %>% read.table(header=FALSE) %>% as_tibble() %>% 
     rename(Chr=V1, Length=V2, Group=V3) %>%
@@ -152,8 +152,8 @@ for (i in 1:length(sptib$V3)){
   
   # Joined tibble
   DATA <- covtib %>%
-    inner_join(typetib)
-  DATA$NonB <- factor(DATA$NonB, levels=c("Any","APR", "DR", "STR", "IR", "TRI", "G4", "Z"))
+    inner_join(typetib) %>% mutate(NonB=if_else(NonB=="Any", "All", NonB))
+  DATA$NonB <- factor(DATA$NonB, levels=c("All","APR", "DR", "STR", "IR", "TRI", "G4", "Z"))
   DATA$Group <- factor(DATA$Group, levels=unique(DATA$Group))
   DATA<-DATA %>% drop_na() %>% mutate(Species=sptib$V1[i])
   COMB<-bind_rows(COMB,DATA%>%select(-Bp,-Length))
@@ -180,27 +180,46 @@ pa<-plots[[1]] +ggtitle("A")
 pa
 
 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #( ALL SPECIES IN ONE, ONLY USING TOTAL Non-B CONTENT )
-ALL <- COMB%>%filter(NonB=="Any")%>%
-  mutate(Species=factor(Species, levels=c("zebra_finch",
-                                          "ural_owl",
-                                          "bandtailed_pigeon",
-                                          "annas_hummingbird",
-                                          "great_bustard",
-                                          "chicken",
-                                          "peking_duck",
-                                          "emu")))
+ALL <- COMB %>% filter(NonB=="All") %>%
+  mutate(Names=case_when(Species=="zebra_finch" ~ "Zebra finch",
+                          Species=="ural_owl" ~ "Ural owl",
+                          Species=="bandtailed_pigeon" ~ "Bandtailed pigeon",
+                          Species=="annas_hummingbird" ~ "Anna's\nhummingbird",
+                          Species=="great_bustard" ~ "Great bustard",
+                          Species=="chicken" ~ "Chicken",
+                          Species=="peking_duck" ~ "Peking duck",
+                          Species=="emu" ~ "Emu",
+                          TRUE ~ Species)) %>%
+  mutate(Names=factor(Names, levels=c("Zebra finch",
+                                          "Ural owl",
+                                          "Bandtailed pigeon",
+                                          "Anna's\nhummingbird",
+                                          "Great bustard",
+                                          "Chicken",
+                                          "Peking duck",
+                                          "Emu")))
 ALL$Group <- factor(ALL$Group, levels=unique(ALL$Group))
 
-ALLGW <- GWCOMB%>%filter(NonB=="Any") %>% 
-  mutate(Species=factor(Species, levels=c("zebra_finch",
-                                          "ural_owl",
-                                          "bandtailed_pigeon",
-                                          "annas_hummingbird",
-                                          "great_bustard",
-                                          "chicken",
-                                          "peking_duck",
-                                          "emu")))
+ALLGW <- GWCOMB %>% filter(NonB=="All") %>%
+  mutate(Names=case_when(Species=="zebra_finch" ~ "Zebra finch",
+                         Species=="ural_owl" ~ "Ural owl",
+                         Species=="bandtailed_pigeon" ~ "Bandtailed pigeon",
+                         Species=="annas_hummingbird" ~ "Anna's\nhummingbird",
+                         Species=="great_bustard" ~ "Great bustard",
+                         Species=="chicken" ~ "Chicken",
+                         Species=="peking_duck" ~ "Peking duck",
+                         Species=="emu" ~ "Emu",
+                         TRUE ~ Species)) %>%
+  mutate(Names=factor(Names, levels=c("Zebra finch",
+                                      "Ural owl",
+                                      "Bandtailed pigeon",
+                                      "Anna's\nhummingbird",
+                                      "Great bustard",
+                                      "Chicken",
+                                      "Peking duck",
+                                      "Emu")))
 
 
 pall<-make_spboxplot(ALL, ALLGW)
@@ -214,7 +233,7 @@ ggsave(filename = "plots/8sp_NonB_boxplot.png",
 OTHER<-ALL %>% filter(Species!="zebra_finch")
 OTHERGW<-ALLGW %>% filter(Species!="zebra_finch")
 pc<-make_spboxplot(OTHER, OTHERGW)
-pc=pc+ggtitle("C")+theme(strip.text=element_blank())
+pc=pc+ggtitle("C")
 pc             
 
 
@@ -225,19 +244,20 @@ pc
 # INPUT FILES FOR B
 windfile="coverage/bTaeGut7v0.4_MT_rDNA.merged.100kb.txt"
 cenfile="ref/bTaeGut7v0.4_MT_rDNA.centromere_detector.v0.1.gff"
-ABfile="ref/bTaeGut7v0.4_MT_rDNA.Cooltools.v0.2.E1.10Kb.flipped.dip.collated.AB.bed"
+ABfile="ref/bTaeGut7v0.4_MT_rDNA.Cooltools.E1.200kbp.flipped.dip.collated.v0.1.bed"
 
 # DATA TIBBLES FOR B
 centib<-cenfile %>% read.table(header=FALSE) %>% as_tibble() %>% 
-  select(V1,V4,V5) %>% rename(Chr=V1, Cen_start=V4, Cen_stop=V5)
-
+  select(V1,V4,V5) %>% rename(Chr=V1, Start=V4, Stop=V5) %>% mutate(Compartment="CEN")
 DATA<-windfile %>% read.table(header=TRUE) %>% as_tibble() %>% 
-  mutate(midpoint=Start+(Stop-Start)/2) %>% inner_join(centib) %>% 
+  mutate(midpoint=Start+(Stop-Start)/2) %>% 
   group_by(NonB)
 DATA$NonB <- factor(DATA$NonB, levels=c("APR", "DR", "STR", "IR", "TRI", "G4", "Z"))
-ABDOT<- ABfile %>% read.table(header=FALSE) %>% as_tibble() %>% rename(Chr=V1, Start=V2, Stop=V3,Comp=V4)
+ABDOT<- ABfile %>% read.table(header=FALSE) %>% as_tibble() %>%
+  select(V1,V2,V3,V4) %>% rename(Chr=V1, Start=V2, Stop=V3,Compartment=V4)
 
-
+# Merge AB and Centromere regions 
+MERGED<-ABDOT %>%bind_rows(centib)
 
 # Choose 1 macro, 1 micro, 1 dot from the data 
 SUB <- DATA %>% filter(Chr=="chr8_mat" | Chr=="chr36_mat" | Chr=="chr18_mat" ) %>% 
@@ -246,32 +266,27 @@ SUB <- DATA %>% filter(Chr=="chr8_mat" | Chr=="chr36_mat" | Chr=="chr18_mat" ) %
                            Chr=="chr36_mat" ~ "Chr36",
                            TRUE ~ Chr)) %>% 
   mutate(max=max(Dens)/1000)
-# Get the centromeres 
-CEN<-SUB %>% select(ChrName, Cen_start, Cen_stop, max, NonB) %>% distinct() %>%
-  mutate(Cen_mid=(Cen_start+Cen_stop)/2)
 
 # Make a tibble with only Chr Start and stop
 CHR<-SUB %>% group_by(ChrName) %>% mutate(Start=0, Stop=max(Stop)) %>%
   select(ChrName, Start, Stop) %>% unique() %>% ungroup()
 
-# Add AB regions 
-AB<-ABDOT %>% filter(Chr=="chr8_mat"| Chr=="chr36_mat" | Chr=="chr18_mat" ) %>% 
+# Add compartment regions 
+ABC<-MERGED %>% filter(Chr=="chr8_mat"| Chr=="chr36_mat" | Chr=="chr18_mat" ) %>% 
   mutate(ChrName=case_when(Chr=="chr8_mat" ~ "Chr8",
                            Chr=="chr18_mat" ~ "Chr18",
                            Chr=="chr36_mat" ~ "Chr36",
                            TRUE ~ Chr)) %>% 
-  select(Chr,Start,Stop,ChrName,Comp)
+  select(Chr,Start,Stop,ChrName,Compartment)
 
 # Apply to all data frames
 chr_order <- c("Chr8", "Chr18", "Chr36")
 SUB$ChrName <- factor(SUB$ChrName, levels = chr_order)
-CEN$ChrName <- factor(CEN$ChrName, levels = chr_order)
 CHR$ChrName <- factor(CHR$ChrName, levels = chr_order)
-AB$ChrName  <- factor(AB$ChrName,  levels = chr_order)
+ABC$ChrName  <- factor(ABC$ChrName,  levels = chr_order)
 
 p1<-ggplot(SUB, aes(x=midpoint/1000000, y=Dens/1000, color=NonB, fill=NonB)) +
-  #  geom_rect(data=CEN, aes(xmin=Cen_start/1000000, ymin=0.0, ymax=max+0.01, xmax=Cen_stop/1000000), inherit.aes = FALSE, fill="gray", color="gray", linewidth=1, show.legend = FALSE) +
-  geom_line(show.legend = FALSE) +
+   geom_line(show.legend = FALSE) +
   geom_area(alpha = 0.7, show.legend = FALSE) +
   facet_grid(NonB~ChrName, scales="free", space="free_x")+
   scale_color_manual(values=viridis_colors)+
@@ -305,14 +320,23 @@ p_dummy <- ggplot() +
   geom_rect(data=CHR,
             aes(xmin=Start/1e6, xmax=Stop/1e6, ymin=0.2, ymax=1),
             fill="white", color="lightgray") +
-  geom_rect(data=AB, aes(xmin=Start/1e6, xmax=Stop/1e6, ymin=0.2, ymax=1, fill=Comp), color=NA, alpha=0.6,show.legend = FALSE) +
-  geom_rect(data=CEN, aes(xmin=Cen_start/1000000, xmax=Cen_stop/1e6, ymin=0.2, ymax=1), fill='red', color=NA,show.legend = FALSE) +
+  geom_rect(data=ABC, aes(xmin=Start/1e6, xmax=Stop/1e6, ymin=0.2, ymax=1, fill=Compartment), color=NA,show.legend = TRUE) +
+  geom_point(
+    data = ABC%>%filter(Compartment=="CEN"),
+    aes(x = (Start + Stop)/2 / 1e6, y = 1.5),
+    shape = 25,  # filled triangle pointing down
+    size = 1,
+    fill = "red",
+    color = "red",
+    inherit.aes = FALSE)+
   facet_grid(.~ChrName, scales="free_x", space="free_x") +
-  scale_fill_manual(values=c("#E38AAA","#6F9DD0"))+
+  scale_fill_manual(values=c("#E38AAA7f","#6F9DD07f", "red"))+
   theme_void() +
   theme(
     panel.background = element_rect(fill="white", colour="white"),
     panel.spacing.x = unit(0.5, "lines"),
+    legend.position = "bottom",
+    legend.justification = "right",
     strip.text.x =element_blank(),
     axis.title.x = element_text(size=14, vjust = 0.5), 
     axis.text.x  = element_text(size=10),
@@ -320,10 +344,12 @@ p_dummy <- ggplot() +
     axis.ticks.length.x = unit(4, "pt"),
     plot.margin  = margin(5,0,-10,0)
   )+
-  scale_x_continuous(name='Position (Mb)', expand = c(0, 0))
+  scale_x_continuous(name='Position (Mb)', expand = c(0, 0))+
+  coord_cartesian(ylim = c(0.2, 1.1), clip = "off")
 p_dummy
 
-pb<- p1/ plot_spacer() / p_dummy  + plot_layout(heights = c(5,-0.5, 0.2), guides = "collect") 
+pb<- p1/ plot_spacer() / p_dummy  + 
+  plot_layout(heights = c(5,-0.5, 0.2))
 pb
 
 ################################################################################

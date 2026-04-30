@@ -1,6 +1,6 @@
 ################################################################################
 ### R code for plotting enrichment in the AB compartments of zebra finch dot 
-### chromosomes and long-read sequenceing coverage in relation to non-B motifs. 
+### chromosomes and long-read sequencing coverage in relation to non-B motifs. 
 ### written by Linnéa Smeds 17-July-2025
 
 ################################################################################
@@ -12,23 +12,28 @@ library(ggpmisc)
 library(ggpubr)
 library(dplyr)
 plotdir="plots/"
+setwd("/Users/lbs5874/Library/CloudStorage/OneDrive-ThePennsylvaniaStateUniversity/Documents/Projects/ZebraFinch/")
+
 
 # Input files 
-compfile="compart/dot_summary.10kb.txt"
+compfile="compart/dot_summary.200kb.txt"
 hifiABfile="coverage/bTaeGut7v0.4_MT_rDNA.hifi.nonB_and_seqCov.dotComp.tsv"   
 ontABfile="coverage/bTaeGut7v0.4_MT_rDNA.ont.nonB_and_seqCov.dotComp.tsv"   
 
 # Reading in the data 
-DATAA<-compfile %>% read.table(header=TRUE) %>% as_tibble()
-DATAA$NonB <- factor(DATAA$NonB, levels=c("Any","APR", "DR", "STR", "IR", "TRI", "G4", "Z"))
+DATAA<-compfile %>% read.table(header=TRUE) %>% 
+  as_tibble() %>% mutate(NonB=if_else(NonB=="Any", "All", NonB))
+DATAA$NonB <- factor(DATAA$NonB, levels=c("All","APR", "DR", "STR", "IR", "TRI", "G4", "Z"))
 
-DATAB <- hifiABfile %>% read.table(header=TRUE) %>% as_tibble()
+DATAB <- hifiABfile %>% read.table(header=TRUE) %>% 
+  as_tibble() %>% mutate(NonB=if_else(NonB=="Any", "All", NonB))
 DATAB$Comp <- factor(DATAB$Comp, levels=c("A","B","."))
-DATAB$NonB <- factor(DATAB$NonB, levels=c("Any","APR", "DR", "STR", "IR","TRI", "G4", "Z"))
+DATAB$NonB <- factor(DATAB$NonB, levels=c("All","APR", "DR", "STR", "IR","TRI", "G4", "Z"))
 
-DATAC <- ontABfile %>% read.table(header=TRUE) %>% as_tibble()
+DATAC <- ontABfile %>% read.table(header=TRUE) %>% 
+  as_tibble() %>% mutate(NonB=if_else(NonB=="Any", "All", NonB))
 DATAC$Comp <- factor(DATAC$Comp, levels=c("A","B","."))
-DATAC$NonB <- factor(DATAC$NonB, levels=c("Any","APR", "DR", "STR", "IR", "TRI", "G4", "Z"))
+DATAC$NonB <- factor(DATAC$NonB, levels=c("All","APR", "DR", "STR", "IR", "TRI", "G4", "Z"))
 
 
 # Set colors
@@ -89,7 +94,7 @@ pB <- ggplot(DATAB, aes(x = SeqCov, y = NonBCov*100/1024)) +
   scale_color_manual(values = comp_col) +
   stat_cor(aes(label=after_stat(rr.label)), color="red3", # Display only the R-squared label
            label.x = 95, label.y = 97, hjust=1, show.legend=FALSE)+ # Adjust position as needed
-  stat_cor(method="spearman", aes(label = after_stat(sub("R", "ρ", r.label))), color="blue", # Display only the rho label
+  stat_cor(method="spearman", aes(label = after_stat(sub("R", "ρ", rr.label))), color="blue", # Display only the rho label
            label.x = 95, label.y = 87, hjust=1, show.legend=FALSE)+ # Adjust position as needed
   labs(x="HiFi coverage (X)", y="Non-B motif coverage (%)")+
   theme(
@@ -117,7 +122,7 @@ pC <- ggplot(DATAC, aes(x = SeqCov, y = NonBCov*100/1024)) +
   scale_color_manual(values = comp_col) +
   stat_cor(aes(label=after_stat(rr.label)), color="red3", # Display only the R-squared label
            label.x = 95, label.y = 97, hjust=1, show.legend=FALSE)+ # Adjust position as needed
-  stat_cor(method="spearman", aes(label = after_stat(sub("R", "ρ", r.label))), color="blue", # Display only the rho label
+  stat_cor(method="spearman", aes(label = after_stat(sub("R", "ρ", rr.label))), color="blue", # Display only the rho label
            label.x = 95, label.y = 87, hjust=1, show.legend=FALSE)+ 
   labs(x="ONT coverage (X)", y="Non-B motif coverage (%)")+
   theme(
