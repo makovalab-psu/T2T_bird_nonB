@@ -3,33 +3,41 @@
 ### CODE WRITTEN BY LINNÉA SMEDS
 
 ##### TABLE OF CONTENTS
-# CALCULATE COVERAGE
+# CALCULATE COVERAGE IN WINDOWS
 #   -PLOTTING COVERAGE USING CIRCOS
 # PREPARE ENRICHMENT CALCULATIONS
-#   -PRINT DENSITIES FOR TABLE
+#   -BASELINE ENRICHMENT PER CHROMOSOME CATEGORY
+#   -PRINT COVERAGE FOR TABLE
 #   -PRINT NUMBER OF MOTIFS AND BASEPAIRS
 #   -SPACER LENGTH DISTRIBUTION FOR DR, IR AND MR
 #   -GC CONTENT PER CHROMOSOME
 
 
 ######################## CALCULATE COVERAGE IN WINDOWS ##########################
-prefix="bTaeGut7v0.4_MT_rDNA"
 
 # Create genomic windows and make length file, trying both 100kb and 10kb windows
 mkdir -p windows/
 mkdir -p coverage
 # Create genomic windows, trying both 100kb and 10kb windows
-cat helpfiles/species_list.txt |tail -n3 |while read -r sp longname prefix
+#cat helpfiles/species_list.txt |tail -n1 |while read -r sp longname prefix
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix # used for shuffled sequence
 do
   bedtools makewindows -g ref/$prefix.fa.fai -w 100000 >windows/$prefix.100kb_windows.bed;
-  bedtools makewindows -g ref/$prefix.fa.fai -w 10000 >windows/$prefix.10kb_windows.bed;
+  #bedtools makewindows -g ref/$prefix.fa.fai -w 10000 >windows/$prefix.10kb_windows.bed;
 done 
 
-cat helpfiles/species_list.txt |grep zebra |while read -r sp longname prefix
+# Get GC-content per window
+prefix="bTaeGut7v0.4_MT_rDNA"
+echo '#!/bin/bash
+bedtools nuc -fi ref/$prefix.fa -bed windows/'$prefix'.100kb_windows.bed |cut -f1-3,5 >coverage/'${prefix}'.GC.100kb.bed
+ '| sbatch -J GC --ntasks=1 --cpus-per-task=1 --mem-per-cpu=6G --out slurm/run.coverage.GC.%j.out
+
+#cat helpfiles/species_list.txt |tail -n1 |while read -r sp longname prefix
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix # used for shuffled sequence
 do
   for wind in "100kb" #"10kb" #
   do
-    for n in  "Zgfa" #"G4" "APR" "DR" "IR" "TRI" "STR" "Z" #"Zgfa" #"G4" "APR" "DR" "DRfilt" "IR" "IRgfa" "MRgfa" "TRI" "STR" "Z" "Zgfa" #"G4quadron"
+    for n in  "G4" "APR" "DR" "IR" "TRI" "STR" "Z" #"Zgfa" #"G4" "APR" "DR" "DRfilt" "IR" "IRgfa" "MRgfa" "TRI" "STR" "Z" "Zgfa" #"G4quadron"
     do
       echo '#!/bin/bash
       module load bedtools/2.31.0
@@ -40,7 +48,8 @@ do
 done 
 
 # For plotting, merge the data:
-cat helpfiles/species_list.txt |while read -r sp longname prefix
+#cat helpfiles/species_list.txt |tail -n1 |while read -r sp longname prefix
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix # used for shuffled sequence
 do
   echo "NonB Chr Start Stop Dens" |sed 's/ /\t/g' >coverage/$prefix.merged.100kb.txt
   for n in "APR" "DR" "G4" "IR" "TRI" "STR" "Z"
@@ -49,7 +58,7 @@ do
   done
 done 
 
-# For Supplementary Plot
+# For Supplementary Plot, only ZF
 prefix="bTaeGut7v0.4_MT_rDNA"
 echo "NonB Chr Start Stop Dens" |sed 's/ /\t/g' >coverage/$prefix.different.merged.100kb.txt
 for n in "G4quadron" "G4" "Z" "Zgfa" "ZDNAm1" "Zseeker"
@@ -63,6 +72,7 @@ done
 # ~~~~~~~~~~~~~~~~~~~~~~~ PLOT COVERAGE USING CIRCOS ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Assume circos is installed in ~/software/circos-0.69-9/
+version ~/software/circos-0.69-10/ for pheasant
 # The circos configuration files are found in circos/
 
 # RUN ZEBRA FINCH SEPARATELY AS IT HAS TWO HAPLOTYPES
@@ -154,7 +164,7 @@ done
 mv helpfiles/chicken.CEN.bed ref/
 
 # THE OTHER SPECIES (ONLY CHICKEN HAS CENTROMERE INFO)
-cat helpfiles/species_list.txt |grep chicken |while read -r sp longname prefix
+cat helpfiles/species_list.txt |grep pheasant |while read -r sp longname prefix
 do
   dir="circos/$sp/"
   mkdir -p $dir
@@ -170,7 +180,7 @@ do
     cat ref/$prefix.CEN.bed |awk '{gsub(/chr/,""); print "nn"$1,$2,$3}' >$dir/data/highlight_CEN.txt
   else
     # Remove centromere highlights from all but chicken
-     sed -i'' -e "s/show_highlights = yes/show_highlights = no/" $dir/circos_halfInnerCircle.conf
+    sed -i'' -e "s/show_highlights = yes/show_highlights = no/" $dir/circos_halfInnerCircle.conf
   fi
   # change order so chrW and chrZ is last
   grep -v "nnZ" $dir/karyotype.txt |grep -v "nnW" >tmp
@@ -187,7 +197,7 @@ do
 
   # Plot
   cd $dir
-  ~/software/circos-0.69-9/bin/circos -conf circos_halfInnerCircle.conf  
+  ~/software/circos-0.69-10/bin/circos -conf circos_halfInnerCircle.conf  
   mv circos.png ${sp}_circos.png
   cp ${sp}_circos.png ~/Downloads/
   cd ../..
@@ -201,21 +211,23 @@ done
 # in a certain chromosome group (macro, micro, microdot), or per chromosome. 
 
 # Calculate genome-wide density to use for normalization
-cat helpfiles/species_list.txt |grep pigeon |while read -r sp longname prefix
+#cat helpfiles/species_list.txt |while read -r sp longname prefix
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix # used for shuffled sequence
 do
   echo '#!/bin/bash
   module load bedtools/2.31.0
   rm -f coverage/'${prefix}'.per_genome.tsv
   totlen=`cat ref/'${prefix}'*.fa.fai | awk '"'"'{sum+=$2}END{print sum}'"'"'`
   echo "Totlen: "$totlen
-  for non_b in  "TRI" "APR" "DR" "G4" "IR" "STR" "Z" "Any"
+  for non_b in  "APR" "DR" "G4" "IR" "STR" "TRI" "Z" "All"
   do
-    cat final_nonB/'${prefix}'.${non_b}.merged.bed | awk -v n=$non_b -v tot=$totlen '"'"'{sum+=$3-$2}END{d=sum/tot; print n, sum, d}'"'"' >>coverage/'${prefix}'.per_genome.tsv
+     cat final_nonB/'${prefix}'.${non_b}.merged.bed | \
+     awk -v n=$non_b -v tot=$totlen '"'"'{sum+=$3-$2}END{d=sum/tot; print n, sum, d}'"'"' >>coverage/'${prefix}'.per_genome.tsv
   done
   ' |sbatch -J enrichment --ntasks=1 --cpus-per-task=1 --mem-per-cpu=8G --out slurm/job.enrichment.$prefix.%j.out
 done
 
-# different annotation algorithms
+# different annotation algorithms, only ZF
 cat helpfiles/species_list.txt |grep zebra |while read -r sp longname prefix
 do
   echo '#!/bin/bash
@@ -233,30 +245,54 @@ done
 
 
 # Per chromosome coverage
-cat helpfiles/species_list.txt |while read -r sp longname prefix
+#cat helpfiles/species_list.txt |grep -v pheasant |while read -r sp longname prefix
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix # used for shuffled sequence
 do
   cat ref/${prefix}.fa.fai |cut -f1,2 |grep -v "chrM" |grep -v "rDNA" |grep -v scaffold |grep -v SCAFFOLD |grep -v contig |grep -v Unplaced |while read -r chr len;
   do
     echo '#!/bin/bash
       module load bedtools/2.31.0
         rm -f tmp.coverage.'$prefix'.'$chr'
-      for non_b in  "TRI" "APR" "DR" "G4" "IR" "STR" "Z" "Any"
+      for non_b in  "TRI" "APR" "DR" "G4" "IR" "STR" "Z" "All"
       do
-          cat final_nonB/'$prefix'.${non_b}.merged.bed | awk -v n=$non_b -v tot='$len' -v chr='$chr' '"'"'($1==chr){sum+=$3-$2; c=$1}END{d=sum/tot; print c, n, sum, d}'"'"' >>tmp.coverage.'$prefix'.'$chr' 
+          cat final_nonB/'$prefix'.${non_b}.merged.bed | \
+          awk -v n=$non_b -v tot='$len' -v chr='$chr' -v sum=0 '"'"'($1==chr){sum+=$3-$2;}END{d=sum/tot; print chr, n, sum, d}'"'"' >>tmp.coverage.'$prefix'.'$chr' 
       done
   '| sbatch -J $chr --ntasks=1 --cpus-per-task=1 --mem-per-cpu=4G --time=1:00:00
   done
 done 
 
 # Merge all chromosomes together into one coverage file 
-cat helpfiles/species_list.txt |while read -r sp longname prefix
+#cat helpfiles/species_list.txt |grep -v pheasant |while read -r sp longname prefix
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix # used for shuffled sequence
 do
   echo -e "Chr\tNonB\tBp\tCoverage" >coverage/${prefix}.per_chrom.tsv
   for chr in $(cat ref/$prefix.fa.fai |cut -f1 |grep "chr" |grep -v "chrM" ) 
   do
-    cat tmp.coverage.$prefix.$chr | sed "s/ /\t/g" >>coverage/$prefix.per_chrom.tsv
+    if [ -f tmp.coverage.$prefix.$chr ]; then
+      cat tmp.coverage.$prefix.$chr | sed "s/ /\t/g" >>coverage/$prefix.per_chrom.tsv
+    else
+      echo "No coverage for $chr"
+      continue
+    fi
   done
 done 
+
+# For shuffled, make one large file with all shuffled chromosomes 
+echo -e "Chr\tNonB\tBp\tCoverage" >coverage/shuffledZFMerged.per_chrom.tsv
+cat helpfiles/shuffled_list.txt |while read -r sp longname prefix # used for shuffled sequence
+do
+  for chr in $(cat ref/$prefix.fa.fai |cut -f1 |grep "chr" |grep -v "chrM" ) 
+  do
+    if [ -s tmp.coverage.$prefix.$chr ]; then
+      cat tmp.coverage.$prefix.$chr | sed "s/ /\t/g" >>coverage/shuffledZFMerged.per_chrom.tsv
+    else
+      echo "No coverage for $chr"
+      continue
+    fi
+  done
+done 
+
 
 # Z-DNA, different annotation algorithms, only ZebraFinch
 prefix="bTaeGut7v0.4_MT_rDNA"
@@ -280,33 +316,36 @@ done
 
 
 # Per chromosome category coverage
-cat helpfiles/species_list.txt |grep zebra |while read -r sp longname prefix
+#cat helpfiles/species_list.txt |grep pheasant |while read -r sp longname prefix
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix # used for shuffled sequence
 do
-  for group in "macro" "micro" "dot" "unplaced"
+  for group in "macro" "micro" "dot" #"unplaced"
   do
     totlen=`grep $group helpfiles/${prefix}.groups.txt |awk 'NR==FNR{a[$1];next} ($1 in a){print}' - ref/${prefix}*.fa.fai | awk '{sum+=$2}END{print sum}'`
     echo '#!/bin/bash
     module load bedtools/2.31.0
     rm -f tmp.coverage.'$prefix'.'${group}'
-    for non_b in "TRI" "APR" "DR" "G4" "IR" "STR" "Z" "Any"
+    for non_b in "TRI" "APR" "DR" "G4" "IR" "STR" "Z" "All"
     do
         grep '$group' helpfiles/'${prefix}'.groups.txt |awk '"'"'NR==FNR{a[$1];next} ($1 in a){print}'"'"' - final_nonB/'${prefix}'.${non_b}.merged.bed |\
          awk -v g='$group '-v n=$non_b -v tot='$totlen' '"'"'{sum+=$3-$2}END{d=sum/tot; print g, n, sum, d}'"'"' >>tmp.coverage.'$prefix'.'${group}'
     done
-    '| sbatch -J per_group --ntasks=1 --cpus-per-task=1 --account=kdm16_cr_default --partition=standard  --mem-per-cpu=2G --time=1:00:00
+    '| sbatch -J per_group --ntasks=1 --cpus-per-task=1 --mem-per-cpu=2G --time=1:00:00
   done
 done 
+
 # Merge all categories together into one coverage file 
-cat helpfiles/species_list.txt |grep humming |while read -r sp longname prefix
+#cat helpfiles/species_list.txt |grep pheasant |while read -r sp longname prefix
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix # used for shuffled sequence
 do
   echo "Group NonB Bp Coverage" |sed "s/ /\t/g" >coverage/${prefix}.per_group.tsv
   for group in "macro" "micro" "dot"
   do
     cat tmp.coverage.$prefix.$group | sed "s/ /\t/g" >>coverage/${prefix}.per_group.tsv
   done
-done 
+done
 
-# Different annotation algorithms 
+# Different annotation algorithms (only Zebra finch for supplement)
 prefix="bTaeGut7v0.4_MT_rDNA"
 for group in "macro" "micro" "dot"
 do
@@ -329,6 +368,24 @@ done
 
 
 
+# ~~~~~~~~~~~~~~~~ BASELINE ENRICHMENT PER CHROMOSOME CATEGORY ~~~~~~~~~~~~~~~~
+# To use for per group comparisons 
+echo -e "Species\tGroup\tNonB\tEnrichment" >coverage/9sp.group_enrichment.tsv
+cat helpfiles/species_list.txt|while read -r sp longname prefix
+do
+  for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "All" 
+  do
+    gw=`grep "^$non_b" coverage/$prefix.per_genome.tsv |cut -f3 -d" "`
+    echo $gw
+    for group in "macro" "micro" "dot"
+    do
+      awk -v s=$sp -v g=$group -v n=$non_b -v gw=$gw -v OFS="\t" '($1==g && $2==n){enr=$4/gw; print s,g,n,enr}' coverage/$prefix.per_group.tsv >>coverage/9sp.group_enrichment.tsv
+    done
+  done
+done
+
+
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~ PRINT COVERAGE FOR TABLE ~~~~~~~~~~~~~~~~~~~~~~~~~~
 # FOR SUPPLEMENTARY TABLE 1
 prefix="bTaeGut7v0.4_MT_rDNA"
@@ -336,7 +393,7 @@ prefix="bTaeGut7v0.4_MT_rDNA"
 cat ref/${prefix}.fa.fai |cut -f1 |grep "chr" |grep -v "chrM" |grep -v "rDNA" |while read -r chr;
 do
     tmp="$chr"
-    for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "Any" #IRall" "MRall" "G4quadron" "Zgfa" "ZDNAm1" "Zseeker" 
+    for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "All" #IRall" "MRall" "G4quadron" "Zgfa" "ZDNAm1" "Zseeker" 
     do
       n=`awk -v chr=$chr -v n=$non_b '($1==chr && $2==n){print $4}' <(cat coverage/${prefix}.per_chrom.tsv coverage/${prefix}.different.per_chrom.tsv |sort |uniq)`
       tmp=$tmp" "$n
@@ -345,7 +402,7 @@ do
 done
 # Whole genome
 tmp="genome"
-for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "Any" #IRall" "MRall" "G4quadron" "Zgfa" "ZDNAm1" "Zseeker" 
+for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "All" #IRall" "MRall" "G4quadron" "Zgfa" "ZDNAm1" "Zseeker" 
 do
   n=`awk -v n=$non_b '($1==n){print $3}' <(cat coverage/${prefix}.per_genome.tsv coverage/${prefix}.different.per_genome.tsv |sort |uniq)`
   tmp=$tmp" "$n
@@ -355,7 +412,7 @@ echo $tmp
 for group in "macro" "micro" "dot"
 do
   tmp="$group"
-  for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "Any" "IRall" "MRall" "G4quadron" "Zgfa" "ZDNAm1" "Zseeker" 
+  for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "All" "IRall" "MRall" "G4quadron" "Zgfa" "ZDNAm1" "Zseeker" 
   do
     n=`awk -v g=$group -v n=$non_b '($1==g && $2==n){print $4}' <(cat coverage/${prefix}.per_group.tsv coverage/${prefix}.different.per_group.tsv)`
     tmp=$tmp" "$n
@@ -364,15 +421,15 @@ do
 done
 
 
-# SUPPLEMENTARY TABLE 3-9
-cat helpfiles/species_list.txt |grep emu |while read -r sp longname prefix
+# SUPPLEMENTARY TABLE 2&4-10
+cat helpfiles/species_list.txt |grep pheasant |while read -r sp longname prefix
 do
   echo "+++++++++++++ PROCESSING $sp +++++++++++++++++++++"
   # Per chromosome
   cat ref/${prefix}.fa.fai |cut -f1 |grep "chr" |grep -v "chrM" |grep -v "rDNA" |while read -r chr;
   do
       tmp="$chr"
-      for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "Any"
+      for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "All"
       do
         n=`awk -v chr=$chr -v n=$non_b '($1==chr && $2==n){print $4}' coverage/${prefix}.per_chrom.tsv`
         tmp=$tmp" "$n
@@ -381,7 +438,7 @@ do
   done
   # Whole genome
   tmp="genome"
-  for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "Any"
+  for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "All"
   do
     n=`awk -v n=$non_b '($1==n){print $3}' coverage/${prefix}.per_genome.tsv`
     tmp=$tmp" "$n
@@ -391,7 +448,7 @@ do
   for group in "macro" "micro" "dot"
   do
     tmp="$group"
-    for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "Any" 
+    for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "All" 
     do
       n=`awk -v g=$group -v n=$non_b '($1==g && $2==n){print $4}' coverage/${prefix}.per_group.tsv`
       tmp=$tmp" "$n
@@ -403,18 +460,18 @@ done
 
 
 # ~~~~~~~~~~~~~~~~~~~~ PRINT NUMBER OF MOTIFS AND BASEPAIRS ~~~~~~~~~~~~~~~~~~~~
-# SUPPLEMENTARY TABLE 2
+# SUPPLEMENTARY TABLE 3&4
 # Write it out with the nonB types as columns
 
-cat helpfiles/species_list.txt |grep zebra |while read -r sp longname prefix
+cat helpfiles/species_list.txt |grep chick |while read -r sp longname prefix
 do
   # Per chromosome
   cat ref/${prefix}.fa.fai |cut -f1 |grep -v "chrM" |grep -v "rDNA" |while read -r chr;
   do
       tmp="$chr"
-      for non_b in "APR" "DR" "STR" "IR"  "TRI" "G4" "Z" "Any"
+      for non_b in "APR" "DR" "STR" "IR"  "TRI" "G4" "Z" "All"
       do
-        n=`grep $chr final_nonB/bTaeGut7v0.4_MT_rDNA.$non_b.bed |wc -l |cut -f1 -d" "`
+        n=`awk -v chr=$chr '($1==chr){print}' final_nonB/$prefix.$non_b.bed |wc -l |cut -f1 -d" "`
         len=`awk -v chr=$chr -v n=$non_b '($1==chr && $2==n){print $3}' coverage/${prefix}.per_chrom.tsv`
         tmp=$tmp" "$n" "$len
       done
@@ -422,9 +479,9 @@ do
   done
   # Whole genome
   tmp="genome"
-  for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "Any"
+  for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "All"
   do
-    n=`wc -l final_nonB/bTaeGut7v0.4_MT_rDNA.$non_b.bed |cut -f1 -d" "`
+    n=`awk 'END{print NR}' final_nonB/$prefix.$non_b.bed`
   #  echo $n
     len=`awk -v n=$non_b '($1==n){print $2}' coverage/${prefix}.per_genome.tsv`
     tmp=$tmp" "$n" "$len
@@ -434,7 +491,7 @@ do
   for group in "macro" "micro" "dot"
   do
     tmp="$group"
-    for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "Any"
+    for non_b in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "All"
     do
         n=`grep $group helpfiles/$prefix.groups.txt |awk 'NR==FNR{a[$1];next} ($1 in a){print}' - final_nonB/$prefix.$non_b.bed |wc -l |cut -f1 -d" "`
       len=`awk -v g=$group -v n=$non_b '($1==g && $2==n){print $3}' coverage/$prefix.per_group.tsv`
@@ -458,10 +515,9 @@ done
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ GC CONTENT PER CHROM ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 mkdir stats/
-prefix="bTaeGut7v0.4_MT_rDNA"
 
 # Find GC and AT of full genomes
-cat helpfiles/species_list.txt |grep -v zebra |while read -r sp longname prefix
+cat helpfiles/species_list.txt |grep pheasant |while read -r sp longname prefix
 do
   echo '#!/bin/bash
   cat ref/'$prefix'.fa | awk '"'"'(!/^>/){gc+=gsub(/[gGcC]/,""); at+=gsub(/[aAtT]/,"")}END{print gc"\t"at}'"'"' >stats/'$prefix'.nuc
@@ -469,7 +525,7 @@ do
 done 
 # And for each chromosome separately
 # (had to add --cpus-per-task=2 --mem-per-cpu=4G for chr2)
-cat helpfiles/species_list.txt |tail -n4 |while read -r sp longname prefix
+cat helpfiles/species_list.txt |tail -n1 |while read -r sp longname prefix
 do
   cat ref/${prefix}*.fa.fai |cut -f1 |grep "chr" |grep -v "chrM" |grep -v "rDNA" |while read -r chr;
   do
@@ -480,7 +536,7 @@ do
 done 
 
 # Merge all and calculate GC content
-cat helpfiles/species_list.txt  |grep -v zebra |while read -r sp longname prefix
+cat helpfiles/species_list.txt  |tail -n1 |while read -r sp longname prefix
 do
   echo "Chr GC_num AT_num GC_cont AT_cont" |sed 's/ /\t/g' >stats/$prefix.GC_per_chrom.txt
   cat ref/${prefix}*.fa.fai |cut -f1 |grep "chr" |grep -v "chrM" |grep -v "rDNA" |while read -r chr;

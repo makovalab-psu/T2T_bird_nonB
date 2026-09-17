@@ -23,7 +23,9 @@ mkdir -p gfa_annotation
 mkdir -p final_nonB
 
 # Run gfa and convert to bed
-cat helpfiles/species_list.txt |while read -r sp longname prefix
+#cat helpfiles/species_list.txt |tail -n1 |while read -r sp longname prefix
+# The following was used for the shuffled genome
+cat helpfiles/shuffled_list.txt |while read -r sp longname prefix
 do
   echo "start gfa for $sp"
   echo '#!/bin/bash
@@ -39,7 +41,9 @@ do
 done 
 # Change name of original IR, Z and MR files as they will not be used for 
 # the main analysis 
-cat helpfiles/species_list.txt |tail -n3 |while read -r sp longname prefix
+#cat helpfiles/species_list.txt |while read -r sp longname prefix
+# Teh following was used for the shuffled genomes
+cat helpfiles/shuffled_list.txt |while read -r sp longname prefix
 do
   mv final_nonB/${prefix}.IR.bed final_nonB/${prefix}.IRgfa.bed
   mv final_nonB/${prefix}.Z.bed final_nonB/${prefix}.Zgfa.bed
@@ -105,7 +109,7 @@ awk -v OFS="\t" '($10<=8){split($13, parts, "/");
 
 # Place output in the directory ZDNAHunter
 module load python/3.11.2
-cat helpfiles/species_list.txt |grep -v zebra_finch |while read -r sp longname prefix
+cat helpfiles/species_list.txt |grep -v zebra_finch |tail -n1 |while read -r sp longname prefix
 do
   #python3 T2T_bird_nonB/python/remap_zdna.py -b ZDNAHunter/$longname.model1.bedgraph -f ref/$prefix.fa.fai -o final_nonB/$prefix.ZDNAm1.bed
   python3 T2T_bird_nonB/python/remap_zdna.py -b ZDNAHunter/$prefix.model2.bedgraph -f ref/$prefix.fa.fai -o final_nonB/$prefix.Z.bed
@@ -122,6 +126,25 @@ done
 # Merge into one file and move to nonB directory:
 cat ZDNAHunter/ZF_*.ZDNA1.bed |sort -k1,1 -k2,2n >final_nonB/$prefix.ZDNA1.bed
 cat ZDNAHunter/ZF_*.ZDNA2.bed |sort -k1,1 -k2,2n >final_nonB/$prefix.ZDNA2.bed
+
+# For the shuffled genome, I divided the fasta file in 2 parts.
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix
+do
+  list1=`head -n39 ref/$prefix.fa.fai |cut -f1 |tr "\n" " "`
+  list2=`tail -n+40 ref/$prefix.fa.fai |cut -f1 |tr "\n" " "`
+  samtools faidx ref/$prefix.fa $list1 >tmp.${prefix}_part1.fa
+  samtools faidx ref/$prefix.fa $list2 >tmp.${prefix}_part2.fa
+  samtools faidx tmp.${prefix}_part1.fa
+  samtools faidx tmp.${prefix}_part2.fa
+done
+
+# After downloading bedgrah from ZDNAHunter webserver (only run model2):
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix
+do
+  python3 T2T_bird_nonB/python/remap_zdna.py -b ZDNAHunter/${prefix}_part1.bedgraph -f tmp.${prefix}_part1.fa.fai -o ZDNAHunter/${prefix}_part1.Z.bed
+  python3 T2T_bird_nonB/python/remap_zdna.py -b ZDNAHunter/${prefix}_part2.bedgraph -f tmp.${prefix}_part2.fa.fai -o ZDNAHunter/${prefix}_part2.Z.bed
+  cat ZDNAHunter/${prefix}_part1.Z.bed ZDNAHunter/${prefix}_part2.Z.bed |sort -k1,1 -k2,2n >final_nonB/${prefix}.Z.bed
+done
 
 
 
@@ -140,7 +163,8 @@ git clone https://github.com/saswat-km/g4Discovery.PanSN.git
 # directory. I manually modified theg4DiscoveryFuncs.py script to add the full 
 # path to the R script run_pqsfinder.R. The script assumes zipped input fasta.
 
-cat helpfiles/species_list.txt |while read -r sp longname prefix
+#cat helpfiles/species_list.txt |tail -n1 |while read -r sp longname prefix
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix
 do
   fasta=../../ref/$prefix.fa
     echo "Split fasta for $sp"
@@ -153,7 +177,8 @@ do
 done 
 
 # Zip input files 
-cat helpfiles/species_list.txt |while read -r sp longname prefix
+#cat helpfiles/species_list.txt |tail -n1 |while read -r sp longname prefix
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix
 do
   echo "Compress fasta for $sp"
   echo '#!/bin/bash
@@ -166,11 +191,12 @@ do
 done 
 
 # Start g4Discovery for all chromosome files 
-cat helpfiles/species_list.txt |while read -r sp longname prefix
+#cat helpfiles/species_list.txt |tail -n1 |while read -r sp longname prefix
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix
 do
   echo "Start g4Discovery for $sp"
   mkdir -p g4discovery/$prefix
-  for file in $(ls ref/split_fasta/$prefix/chrW.fa.gz)
+  for file in $(ls ref/split_fasta/$prefix/*.fa.gz)
   do
     # If file is bigger than 30Mb, use 4 cores
     if [ $(awk -v fa=$file 'BEGIN{cmd="stat -c%s "fa; cmd | getline size; close(cmd); print size}') -gt 30000000 ]; then
@@ -191,7 +217,7 @@ do
     module load python/3.11.2
     module load r/4.5.0
     python3 ~/software/g4Discovery.PanSN/src/g4Discovery.py -fa '$file' -o g4discovery/'$prefix'/'$chr'.bed 
-      ' |sbatch -J g4D.$chr  --ntasks=1 --cpus-per-task=$cpus --mem-per-cpu=$mem --time=1-00:00:00 -o slurm/job.g4D.$chr.$prefix.%j.%N.out
+      ' |sbatch -J g4D.$chr  --ntasks=1 --cpus-per-task=$cpus  --mem-per-cpu=$mem --time=1-00:00:00 -o slurm/job.g4D.$chr.$prefix.%j.%N.out
   done
 done 
 # used 1 cores for all files smaller than 30Mb for which I used 4 cores. 
@@ -200,7 +226,8 @@ done
 # 1 core/4Gb was not enough for pigeon chrW. rerun with 2 cores/6Gb
 
 # Combine results into one bed file per species 
-cat helpfiles/species_list.txt |while read -r sp longname prefix
+#cat helpfiles/species_list.txt |tail -n1 |while read -r sp longname prefix
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix
 do
   echo "Combine g4Discovery results for $sp"
   rm -f final_nonB/$prefix.G4.bed
@@ -266,7 +293,8 @@ done
 
 ################## CREATE A JOINT DIRECTORY WITH ANNOTATIONS ###################
 #Make sure all non-B bed files are in the final folder, and make merged versions 
-cat helpfiles/species_list.txt |while read -r sp longname prefix
+#cat helpfiles/species_list.txt |tail -n1 |while read -r sp longname prefix
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix # used for shuffled sequence
 do
   for n in "G4" "APR" "DR" "IR" "TRI" "STR" "Z" #"IRgfa" "MRgfa" "Zgfa" "G4quadron" "ZDNAm1" 
   do
@@ -277,13 +305,14 @@ do
   done
 done
 
-# And a joint bed file called "Any" (Just using the chosen settings for each type)
+# And a joint bed file called "All" (Just using the chosen settings for each type)
 module load bedtools/2.31.0
-cat helpfiles/species_list.txt |grep Pat |while read -r sp longname prefix
+#cat helpfiles/species_list.txt |tail -n1 |while read -r sp longname prefix
+cat helpfiles/shuffled_list.txt |tail -n+2 |while read -r sp longname prefix # used for shuffled sequence
 do
-  echo "Make Any bed for $sp"
-  sort -m final_nonB/$prefix.APR.merged.bed final_nonB/$prefix.DR.merged.bed final_nonB/$prefix.IR.merged.bed final_nonB/$prefix.TRI.merged.bed final_nonB/$prefix.STR.merged.bed final_nonB/$prefix.G4.merged.bed final_nonB/$prefix.Z.merged.bed >final_nonB/$prefix.Any.bed
-  sort -k1,1 -k2,2n final_nonB/$prefix.Any.bed |mergeBed -i - >final_nonB/$prefix.Any.merged.bed
+  echo "Make All bed for $sp"
+  sort -m final_nonB/$prefix.APR.merged.bed final_nonB/$prefix.DR.merged.bed final_nonB/$prefix.IR.merged.bed final_nonB/$prefix.TRI.merged.bed final_nonB/$prefix.STR.merged.bed final_nonB/$prefix.G4.merged.bed final_nonB/$prefix.Z.merged.bed >final_nonB/$prefix.All.bed
+  sort -k1,1 -k2,2n final_nonB/$prefix.All.bed |mergeBed -i - >final_nonB/$prefix.All.merged.bed
 done 
 
 
@@ -294,7 +323,7 @@ done
 mkdir overlap
 
 # Check overlap for each chromosome separately
-cat helpfiles/species_list.txt |while read -r sp longname prefix
+cat helpfiles/species_list.txt |tail -n1 |while read -r sp longname prefix
 do
   echo '#!/bin/bash
   cat ref/'$prefix'.fa.fai |grep "chr" |cut -f1 |while read -r chr;
@@ -308,7 +337,7 @@ done
 # The longest chr2 took 3Gb of RAM and less than a minute to run.
 # When doing all 17 types, it used 5Gb and tool 1.5min
 
-cat helpfiles/species_list.txt |grep zebra |while read -r sp longname prefix
+cat helpfiles/species_list.txt |while read -r sp longname prefix
 do
   # Merge autosomes
   cat overlap/$prefix.summary.7types.chr[0-9]*.txt |sort | awk -v OFS="\t" '{if(NR==1){type=$1; sum=$2}else{if($1==type){sum+=$2}else{print type,sum; type=$1; sum=$2}}}END{print type,sum}' > overlap/$prefix.summary.7types.autosomes.txt
@@ -326,7 +355,7 @@ done
 # To get the fraction I first need the totals for all types
 # This does not work when some of the names are overlapping 
 mkdir stats/nonB_totals
-cat helpfiles/species_list.txt |while read -r sp longname prefix
+cat helpfiles/species_list.txt |grep duck |while read -r sp longname prefix
 do
   for file in $(ls overlap/$prefix.summary.7types.*.txt)
   do
@@ -396,7 +425,7 @@ do
 done 
 
 #When all jobs are done, merge  
-cat helpfiles/species_list.txt |grep zebra |while read -r sp longname prefix
+cat helpfiles/species_list.txt |grep duck |while read -r sp longname prefix
 do
   echo "Region NonB Overlap" |sed 's/ /\t/g' >overlap/$prefix.merged.7types.summary.txt
   echo "Region NB1 NB2 Ovl Frac" |sed 's/ /\t/g' >overlap/$prefix.merged.7types.pairwise.txt
@@ -409,7 +438,7 @@ done
 
 
 # Some stats
-cat helpfiles/species_list.txt |grep zebra |while read -r sp longname prefix
+cat helpfiles/species_list.txt |while read -r sp longname prefix
 do
   echo "+++++++++++++++++++++++++++++++++++++++++++"  
   echo $sp
@@ -460,11 +489,17 @@ peking_duck
 Total non-B bases: 102946645
 Bases in overlap: 17117681
 Bases in at least three types: 6259198
++++++++++++++++++++++++++++++++++++++++++++
+golden_pheasant
+Total non-B bases: 69363087
+Bases in overlap: 9424040
+Bases in at least three types: 3091917
+
 
 
 
 # Number of bases with only one vs more than one non-B annotation
-cat helpfiles/species_list.txt |while read -r sp longname prefix
+ cat helpfiles/species_list.txt |tail -n1 |while read -r sp longname prefix
 do
   echo "+++++++++++++++++++++++++++++++++++++++++++"  
   echo $sp
@@ -543,6 +578,14 @@ chrW* 950456 210062
 macro 49998800 10812492
 micro 24488558 4145728
 dot 11341606 2159461
++++++++++++++++++++++++++++++++++++++++++++
+golden_pheasant
+autosomes 53947736 8240833
+chrZ* 4198914 856953
+chrW* 1792397 326254
+macro 40457494 5836661
+micro 14294854 1774435
+dot 5186699 1812944
 
 
 
