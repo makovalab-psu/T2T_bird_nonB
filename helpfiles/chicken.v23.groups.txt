@@ -21,12 +21,12 @@ chr21	7106554 micro
 chr22	5772503 micro
 chr23	6970121 micro
 chr24	8591846 micro
-chr25	4095597 dot
+chr25	4095597 micro
 chr26	6534586 micro
 chr27	6322964 micro
 chr28	5942585 micro
-chr33	4180360 dot
-chrW	14151827    micro
+chr33	4180360 micro
+chrW	14151827    dot
 chrZ	87735852    macro
 chr16	4932503 dot
 chr29	6839231 dot

@@ -31,7 +31,7 @@ chr30	6798920 dot
 chr31	6328656 dot
 chr33	10137796    dot
 chr32	6519831 dot
-chrW	16023107    micro
+chrW	16023107    macro
 chrZ	86241827    macro
 chr34	6270034 dot
 chr35	5248182 dot
