@@ -6,6 +6,7 @@
 ##### TABLE OF CONTENTS
 # PROCESS THE ANNOTATION FILE INTO GENE CATEGORIES
 # CREATE MERGED FILES FOR EACH FUNCTIONAL CATEGORY 
+#   -EXTRACT CODING DENSITY PER WINDOW
 # CALCULATE ENRICHMENT
 #   -CALCULATE ENRICHMENT FOR CHROMOSOME TYPES
 #   -CALCULATE ENRICHMENT USING A CHROMOSOME CATEGORY-BASED AVG 
@@ -265,7 +266,8 @@ do
   else
     awk -F'\t' -v OFS="\t" '($3=="lnc_RNA"){match($9, /gene=[^;]+/, type);gsub(/gene=/, "", type[0]);print $1, $4-1, $5, type[0], ".", $7}' ref/$prefix.longest_only.gff  >annotation/$prefix.lncrna.raw.bed
   fi
-  # ====================== CLEAN UP OVERLAPPING REGIONS ==========================
+
+  # ====================== CLEAN UP OVERLAPPING REGIONS ========================
   echo "clean up and remove overlap"
   # UTRs (remove CDS)
   subtractBed -a annotation/$prefix.UTR5.raw.bed -b annotation/$prefix.CDS.bed -nonamecheck >annotation/$prefix.UTR5.bed
@@ -294,6 +296,33 @@ do
       sort -k1,1 -k2,2n annotation/$prefix.$class.bed | mergeBed -i - >annotation/$prefix.$class.merged.bed
   done
 done 
+
+
+
+# ~~~~~~~~~~~~~~~~~~~~~ EXTRACT CODING DENSITY PER WINDOW ~~~~~~~~~~~~~~~~~~~~~~
+wind="100kb" 
+prefix="bTaeGut7v0.4_MT_rDNA"
+echo '#!/bin/bash
+module load bedtools/2.31.0
+intersectBed -wao -a windows/'$prefix'.'${wind}'_windows.bed -b annotation/'$prefix'.CDS.merged.bed| cut -f1,2,3,7 |\
+  awk -v OFS="\t" '"'"'{if(NR==0){chr=$1; s=$2; e=$3; sum=$4}else{if($1==chr && $2==s){sum+=$4}else{print chr,s,e,sum; chr=$1; s=$2; e=$3; sum=$4}}}END{print chr,s,e,sum}'"'"' |\
+   sed "/^\s*$/d" >coverage/'${prefix}'.coding.'$wind'.bed
+'| sbatch -J coding --ntasks=1 --cpus-per-task=1 --mem-per-cpu=6G --out slurm/run.coverage.coding.%j.out -t 10:00:00
+
+
+# ~~~~~~~~~~~~~~~~~~ EXTRACT FULL GENE DENSITY PER WINDOW ~~~~~~~~~~~~~~~~~~~~~~
+# Only coding genes 
+wind="100kb" 
+prefix="bTaeGut7v0.4_MT_rDNA"
+echo '#!/bin/bash
+module load bedtools/2.31.0
+cat annotation/'$prefix'.CDS.merged.bed annotation/'$prefix'.introns_coding.merged.bed \
+ annotation/'$prefix'.UTR5.merged.bed annotation/'$prefix'.UTR3.merged.bed | sort -k1,1 -k2,2n |mergeBed -i - |
+intersectBed -wao -a windows/'$prefix'.'${wind}'_windows.bed -b - | cut -f1,2,3,7 |\
+  awk -v OFS="\t" '"'"'{if(NR==0){chr=$1; s=$2; e=$3; sum=$4}else{if($1==chr && $2==s){sum+=$4}else{print chr,s,e,sum; chr=$1; s=$2; e=$3; sum=$4}}}END{print chr,s,e,sum}'"'"' |\
+   sed "/^\s*$/d" >coverage/'${prefix}'.coding_full_genes.'$wind'.bed
+'| sbatch -J coding --ntasks=1 --cpus-per-task=1 --mem-per-cpu=6G --out slurm/run.coverage.coding.%j.out -t 10:00:00
+
 
 
 ######################## DIVIDE ANNOTATIONS PER GROUP ###########################
@@ -430,11 +459,10 @@ do
       ' | sbatch -J $class --ntasks=1 --cpus-per-task=1 --time=15:00 --out slurm/job.functional.$prefix.$class.%j.out
   done
 done 
---account=kdm16_sc_default --partition=sla-prio 
 
 # FOR TESTING - REMOVE 
-len=`awk '{sum+=$3-$2}END{print sum}' annotation/$prefix.$class.merged.bed`
-intersectBed -a annotation/$prefix.$class.merged.bed -b final_nonB/${prefix}.${non_b}.merged.bed -wo |awk -v l=$len -v dtot=$dens '{sum+=$7}END{d=sum/l; frac=d/dtot; print sum, l, d,frac}'
+#len=`awk '{sum+=$3-$2}END{print sum}' annotation/$prefix.$class.merged.bed`
+#intersectBed -a annotation/$prefix.$class.merged.bed -b final_nonB/${prefix}.${non_b}.merged.bed -wo |awk -v l=$len -v dtot=$dens '{sum+=$7}END{d=sum/l; frac=d/dtot; print sum, l, d,frac}'
 
 # Merge the tmp files
 echo -e "Species\tClass\tnonB\tCoverage\tEnrichment_gw" >functional/8sp.enrichment.tsv
@@ -503,11 +531,52 @@ done
 #rm tmp.group.*.*
 
 
+# ~~~~~~~~~~ CALCULATE ENRICHMENT USING CHROM CATEGORY AS BASELINE ~~~~~~~~~~~~~
+
+cat helpfiles/species_list.txt |grep -v golden_pheasant |while read -r sp longname prefix
+do
+  for group in "macro" "micro" "dot"
+  do
+    for class in "lncrna"  "intergenic" "introns" "introns_noncoding" "introns_coding" "promoter" "CDS" "UTR5" "UTR3" 
+    do
+        echo '#!/bin/bash
+        module load bedtools/2.31.0
+        len=`awk '"'"'{sum+=$3-$2}END{print sum}'"'"' annotation/group_wise/'$prefix'.'$group'.'$class'.merged.bed`
+        echo "Length of '$class' is $len"
+        rm -f tmp.group.grpwise.'$prefix'.'$group'.'$class'
+        cat coverage/bTaeGut7v0.4_MT_rDNA.per_group.tsv |awk -v g='$group' '"'"'(g==$1){print}'"'"' | while read -r gr non_b bp cov;
+        do
+            echo "looking at $non_b"
+            d=`intersectBed -a annotation/group_wise/'$prefix'.'$group'.'$class'.merged.bed -b final_nonB/'${prefix}'.${non_b}.merged.bed -wo -nonamecheck |awk -v l=$len -v dtot=$cov '"'"'{sum+=$7}END{d=sum/l; frac=d/dtot; print d,frac}'"'"'`
+            echo '$sp'" "'$group'" "'$class'" "$non_b" "$d >>tmp.group.grpwise.'$prefix'.'$group'.'$class'
+        done
+        ' | sbatch -J $class --ntasks=1 --cpus-per-task=1 --time=15:00 --out slurm/job.functional.groupavg.$group.$class.%j.out
+    done
+  done
+done 
+
+# Merge the tmp files
+echo "Species Group Class nonB Coverage Enrichment_grp" |sed "s/ /\t/g" >functional/8sp.enrichment_groups.groupavg.tsv
+cat helpfiles/species_list.txt |grep -v golden_pheasant |while read -r sp longname prefix
+do
+  for group in "macro" "micro" "dot"
+  do
+    for class in  "promoter" "intergenic" "introns" "CDS" "UTR5" "UTR3"  "lncrna"
+    do
+      if [[ ($sp == "chicken" || $sp == "great_bustard") && $class == "lncrna" ]]; 
+      then
+        echo "Skipping $sp $class"
+      else
+        cut -f2- -d " " tmp.group.grpwise.$prefix.$group.$class | \
+        sed "s/ /\t/g" |awk -v s=$sp '{print s"\t"$0}' >>functional/8sp.enrichment_groups.groupavg.tsv
+      fi
+    done
+  done
+done
+
 
 # ~~~~~~~~ CALCULATE ENRICHMENT USING A GROUP BASED INTERGENIC AVG ~~~~~~~~~~
-# Tried first dividing by group average, this was not included in the 
-# paper as it doesn't make much sense for the dotchromosomes, where almost 
-# everything is coding. 
+# Also try to use group intergenic as a baseline (not sure this will be used)
 
 cat helpfiles/species_list.txt |head -n1 |while read -r sp longname prefix
 do
@@ -532,7 +601,7 @@ do
 done 
 
 # Merge the tmp files
-echo "Species Group Class nonB Coverage Enrichment_gw" |sed "s/ /\t/g" >functional/8sp.enrichment_groups.groupavg.tsv
+echo "Species Group Class nonB Coverage Enrichment_vs_grpintergenic" |sed "s/ /\t/g" >functional/8sp.enrichment_groups.groupavg.tsv
 cat helpfiles/species_list.txt |head -n1 |while read -r sp longname prefix
 do
   for group in "macro" "micro" "dot"
@@ -619,8 +688,8 @@ do
   done
 done
 
-# Calculate the enrichment for each of the subsamples
-cat helpfiles/species_list.txt |head -n1 |while read -r sp longname prefix
+# Calculate the enrichment for each of the subsamples - UPDATED TO USE GROUP AS BASELINE
+cat helpfiles/species_list.txt |grep -v "pheasant" |while read -r sp longname prefix
 do
   echo "Calculating enrichment for resamples of $prefix"
   for subset in "50perc" 
@@ -633,39 +702,40 @@ do
           module load bedtools/2.31.0
           for i in {1..100}
           do
-              rm -f functional/resample/'$prefix'/tmp.RegionSampling.'$subset'.'$class'.'$group'.$i.txt
+              rm -f functional/resample/'$prefix'/tmp.RegionSampling.groupavg.'$subset'.'$class'.'$group'.$i.txt
               len=`awk '"'"'{sum+=$3-$2}END{print sum}'"'"' functional/resample/'$prefix'/RegionSampling.'$subset'.'$class'.'$group'.$i.bed`
-              cat coverage/'${prefix}'.per_genome.tsv |grep -v "Any" | while read -r non_b tot dens;
+              cat coverage/'${prefix}'.per_group.tsv |grep '$group' | while read -r gr non_b tot dens;
               do
                   d=`intersectBed -a functional/resample/'$prefix'/RegionSampling.'$subset'.'$class'.'$group'.$i.bed -b final_nonB/'$prefix'.${non_b}.merged.bed -wo |awk -v l=$len -v dtot=$dens '"'"'{sum+=$7}END{d=sum/l; frac=d/dtot; print frac}'"'"'`
-                  echo $i '$group' '$class' $non_b $d >>functional/resample/'$prefix'/tmp.RegionSampling.'$subset'.'$class'.'$group'.$i.txt
+                  echo $i '$group' '$class' $non_b $d >>functional/resample/'$prefix'/tmp.RegionSampling.groupavg.'$subset'.'$class'.'$group'.$i.txt
               done
           done
           ' |sbatch -J $prefix.$class.$group -o slurm/job.RegionSampling-enrich.$subset.$class.$group.%j.out --ntasks=1 --cpus-per-task=1 --mem-per-cpu=4G --time=1:00:00
       done
     done
   done
-done 
+done
 
 # Merge the results
 rep="100rep"
 subset="50perc"
-cat helpfiles/species_list.txt |head -n1 |while read -r sp longname prefix
+cat helpfiles/species_list.txt |grep -v pheasant |while read -r sp longname prefix
 do
-  echo "Rep Group Class nonB Enrichment" |sed "s/ /\t/g" >functional/$prefix.RegionSampling.summary.$subset.$rep.txt
-  cat functional/resample/$prefix/tmp.RegionSampling.$subset.*.*.{1..100}.txt |sed "s/ /\t/g" >>functional/$prefix.RegionSampling.summary.$subset.$rep.txt
-done 
+  echo "Rep Group Class nonB Enrichment" |sed "s/ /\t/g" >functional/$prefix.RegionSampling.groupavg.summary.$subset.$rep.txt
+  cat functional/resample/$prefix/tmp.RegionSampling.groupavg.$subset.*.*.{1..100}.txt |\
+    sed "s/ /\t/g" >>functional/$prefix.RegionSampling.groupavg.summary.$subset.$rep.txt
+done
 
 # We want to find the min and max for each category, but remove the ~5% most
 # extreme (meaning we remove the top and bottom two values, saving a 96% 'CI')
 rep="100rep"
 subset="50perc" 
-cat helpfiles/species_list.txt |head -n1 |while read -r sp longname prefix
+cat helpfiles/species_list.txt |grep -v pheasant |while read -r sp longname prefix
 do
-  echo "Group Class nonB Min Max" |sed "s/ /\t/g" >functional/$prefix.RegionSampling.minmax.$subset.$rep.96CI.txt
+  echo "Group Class nonB Min Max" |sed "s/ /\t/g" >functional/$prefix.RegionSampling.groupavg.minmax.$subset.$rep.96CI.txt
   for group in "macro" "micro" "dot"
   do
-    for class in "promoter" "intergenic" "introns" "CDS" "UTR5" "UTR3"  "lncrna"
+    for class in "promoter" "intergenic" "introns" "CDS" "UTR5" "UTR3" "lncrna"
     do
         if [[ ($sp == "chicken" || $sp == "great_bustard") && $class == "lncrna" ]]; 
         then
@@ -673,9 +743,9 @@ do
         else
           for nonb in APR DR G4 IR TRI STR Z
           do
-              min=`grep $class functional/$prefix.RegionSampling.summary.$subset.$rep.txt |awk -v nb=$nonb -v g=$group -v OFS="\t" '($4==nb && $2==g){print $5}' |sort -n |head -n3 |tail -n1`
-              max=`grep $class functional/$prefix.RegionSampling.summary.$subset.$rep.txt |awk -v nb=$nonb -v g=$group -v OFS="\t" '($4==nb && $2==g){print $5}' |sort -n |tail -n3 |head -n1`
-              echo $group $class $nonb $min $max |sed "s/ /\t/g" >>functional/$prefix.RegionSampling.minmax.$subset.$rep.96CI.txt
+              min=`grep $class functional/$prefix.RegionSampling.groupavg.summary.$subset.$rep.txt |awk -v nb=$nonb -v g=$group -v OFS="\t" '($4==nb && $2==g){print $5}' |sort -n |head -n3 |tail -n1`
+              max=`grep $class functional/$prefix.RegionSampling.groupavg.summary.$subset.$rep.txt |awk -v nb=$nonb -v g=$group -v OFS="\t" '($4==nb && $2==g){print $5}' |sort -n |tail -n3 |head -n1`
+              echo $group $class $nonb $min $max |sed "s/ /\t/g" >>functional/$prefix.RegionSampling.groupavg.minmax.$subset.$rep.96CI.txt
           done
         fi
     done
@@ -765,32 +835,6 @@ do
 done 
 
 
-
-#TEST OUTSIDE SLURM - TO BE DELETED
- grep $group helpfiles/$prefix.groups.txt | cut -f1 | \
-      awk 'NR==FNR{a[$1];next} $1 in a' - annotation/$prefix.$class.bed | \
-      sort -k1,1 -k6,6 -k4,4 -k2,2n | \
-      awk '{
-      chr=$1; start=$2; end=$3; gene=$4; strand=$6;
-      if(NR==1){
-          cur_chr=chr; cur_gene=gene; cur_strand=strand;
-          mstart=start; mend=end;
-          next;
-      }
-      # same gene + same chr + same strand AND overlapping?
-      if(chr==cur_chr && gene==cur_gene && strand==cur_strand && start <= mend){
-          if(end > mend) mend = end;
-      } else {
-          print cur_chr, mstart, mend, cur_gene, ".", cur_strand;
-          cur_chr=chr; cur_gene=gene; cur_strand=strand;
-          mstart=start; mend=end;
-        }
-      }
-      END{
-        print cur_chr, mstart, mend, cur_gene, ".", cur_strand;
-      }' OFS="\t"
-
-
 # To get distributions for Coding and Template mean bars, I would like to get a
 # coverage value for each gene
 cat helpfiles/species_list.txt |head -n1 |while read -r sp longname prefix
@@ -832,9 +876,6 @@ do
     done
   done
 done 
-
-#TEST OUTSIDE SLURM - TO BE DELETED 
-intersectBed -a annotation/gene_merge/$prefix.$group.$class.bed -b final_nonB/${prefix}.G4.bed -s -wao |sort -k1,1 -k2,2n | mergeBed -i - -s -c 4 -o distinct
 
 
 # Merge
@@ -1020,7 +1061,6 @@ done >>repeats/$prefix.intron_enrichment.group.tsv
 
 
 # TEST 
-
 intersectBed -a <(grep $group helpfiles/$prefix.groups.txt | \
       awk 'NR==FNR{a[$1];next} ($1 in a){print}' - repeats/intronTRF/$prefix.introns_${i}.bed) \
       -b final_nonB/$prefix.${non_b}.merged.bed -wo |awk -v l=$len -v dtot=$dens '{sum+=$NF}END{d=sum/l; frac=d/dtot; print d, frac}'

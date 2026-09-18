@@ -4,6 +4,7 @@
 
 ##### TABLE OF CONTENTS
 # CALCULATE ENRICHMENT
+#    -COMPARISON WITH MACRO AND MICRO CHROMOSOMES
 #    -FUNCTIONAL ENRICHMENT IN A & B COMPARTMENTS
 #    -CALCULATE STATS
 # INTRON TRFs IN DOT CHROMOSOME COMPARTMENTS
@@ -20,7 +21,7 @@ wget https://genomeark.s3.amazonaws.com/species/Taeniopygia_guttata/bTaeGut7/man
 grep dot helpfiles/bTaeGut7v0.4_MT_rDNA.groups.txt |cut -f1 |\
 grep -f - ref/bTaeGut7v0.4_MT_rDNA.Cooltools.E1.200kbp.flipped.dip.collated.v0.1.bed >compart/bTaeGut7v0.4_MT_rDNA.dot.AB.200kb.bed
 
-# Extract all windows from the new file from Simonas
+# Extract all windows from the new file from Simona
 #grep dot helpfiles/bTaeGut7v0.4_MT_rDNA.groups.txt |cut -f1 |\
 #grep -f - ref/bTaeGut7v0.4_MT_rDNA.Cooltools.v0.2.E1.10Kb.flipped.dip.collated.AB.noNA.REP.GC.GA.MET.GENES.SAT.HiFicov.ONTcov.bed \
 #|cut -f1,2,3,5 >compart/bTaeGut7v0.4_MT_rDNA.dot.AB.10kb.windows.bed
@@ -57,6 +58,54 @@ do
 
   cat compart/${chr}_summary.200kb.txt |sed 's/ /\t/g' >>compart/dot_summary.200kb.txt
 done
+
+# ~~~~~~~~~~~~~~~~~ COMPARISON WITH MACRO AND MICRO CHROMOSOMES ~~~~~~~~~~~~~~~~
+# This was added in the revision of the paper. 
+
+# Extract only A and B compartments from macro- and microchromosomes
+for group in "macro" "micro"
+do
+ grep $group helpfiles/bTaeGut7v0.4_MT_rDNA.groups.txt |cut -f1 |\
+ grep -f - ref/bTaeGut7v0.4_MT_rDNA.Cooltools.E1.200kbp.flipped.dip.collated.v0.1.bed >compart/bTaeGut7v0.4_MT_rDNA.$group.AB.200kb.bed
+done 
+
+module load bedtools/2.31.0
+prefix="bTaeGut7v0.4_MT_rDNA"
+for group in "macro" "micro"
+do
+  AB_bed="compart/${prefix}.$group.AB.200kb.bed"
+  # Per chromosome
+  for chr in `grep $group helpfiles/bTaeGut7v0.4_MT_rDNA.groups.txt |cut -f1`;
+  do
+    echo '#!/bin/bash
+    module load bedtools/2.31.0
+    rm -f compart/'$chr'_summary.200kb.txt
+    for nb in "APR" "DR" "STR" "IR" "TRI" "G4" "Z" "All"
+    do
+      totdens=`grep $nb coverage/'${prefix}'.per_genome.tsv |cut -f3 -d" "`
+      for region in "A" "B"
+      do
+        summary=`grep '$chr' '$AB_bed' |awk -v OFS="\t" -v r=$region '"'"'($4==r){print $1,$2,$3}'"'"'|\
+        intersectBed -a - -b final_nonB/'${prefix}'.${nb}.merged.bed -wao |cut -f1,2,3,7|\
+          awk -v OFS="\t" '"'"'{if(NR==0){chr=$1; s=$2; e=$3; sum=$4}else{if($1==chr && $2==s){sum+=$4}else{print chr,s,e,sum; chr=$1; s=$2; e=$3; sum=$4}}}END{print chr,s,e,sum}'"'"' |\
+          sed "/^\s*$/d" |awk -v gwd=$totdens '"'"'{sum_l+=$3-$2; sum_nb+=$4}END{d=sum_nb/sum_l; enr=d/gwd; print sum_l,sum_nb,d,enr}'"'"'`
+        echo '$chr'" "$nb" "$region" "$summary >>compart/'$chr'_summary.200kb.txt
+      done
+    done
+  ' |sbatch -J dot.$chr --ntasks=1 --cpus-per-task=1 --time=1:00:00 --mem-per-cpu=4G --out slurm/job.AB.$chr.%j.out
+  done
+done 
+
+# Merge into one file
+for group in "macro" "micro"
+do
+  echo "Chr NonB Compartment CompLen NonBLen Density Enrichment" |sed 's/ /\t/g' >compart/$group.summary.200kb.txt
+  for chr in `grep $group helpfiles/bTaeGut7v0.4_MT_rDNA.groups.txt |cut -f1`;
+  do
+    cat compart/${chr}_summary.200kb.txt |sed 's/ /\t/g' >>compart/$group.summary.200kb.txt
+  done
+done 
+
 
 
 # ~~~~~~~~~~~~~~~~~ FUNCTIONAL ENRICHMENT IN A & B COMPARTMENTS ~~~~~~~~~~~~~~~~

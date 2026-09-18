@@ -6,6 +6,7 @@
 # PREPROCESSING THE REPEAT ANNOTATION
 #   -FIND ALL OVERLAPS WITH NON-B DNA MOTIFS
 #   -MAKE A REPEAT LIST WITH LENGTHS
+#   -EXTRACT REPEAT DENSITY PER WINDOW  
 # CALCULATE ENRICHMENT IN THE REPEAT TYPES
 #   -MANUAL CHECK OF INTERESTING REPEATS
 #   -CALCULATE ENRICHMENT PER CHROMOSOME TYPE
@@ -36,8 +37,8 @@ awk -v OFS="\t" -F'\t' '{split($9, a, ";");
 
 # There are both "LTR/unknown" and "LTR/Unknown" in this file! Merge them into
 # one:
- sed 's/LTR\/unknown/LTR\/Unknown/g' annotation/EDTA2.$prefix.v0.2.bed >edta.tmp
- mv edta.tmp annotation/EDTA2.$prefix.v0.2.bed
+ sed 's/LTR\/unknown/LTR\/Unknown/g' annotation/$prefix.EDTA2.v0.2.bed >edta.tmp
+ mv edta.tmp annotation/$prefix.EDTA2.v0.2.bed
 
 # TRFs; add how many basepairs each repeat unit is, and group into categories
  cat ref/${prefix}.trf.sorted.v0.1.bed |\
@@ -47,17 +48,17 @@ awk -v OFS="\t" -F'\t' '{split($9, a, ";");
       else if(l>=11 && l<51){g="11-50mer"}
       else if(l>=51 && l<101){g="51-100mer"}
       else if(l>=101){g="100+mer"};
-      print $1,$2,$3,g,l"-mer"}' >annotation/TRF_withMers.bed
+      print $1,$2,$3,g,l"-mer"}' >annotation/$prefix.TRF_withMers.bed
 
 # The Satellites are already in bedformat with satellite name in the 4th column,
 # but I'll make a new file just for consistency. 
-cut -f1-4 ref/bTaeGut7v0.4_MT_rDNA.satellome.v0.1.bed >functional/annotation/Satellites.bed
+cut -f1-4 ref/bTaeGut7v0.4_MT_rDNA.satellome.v0.1.bed >annotation/$prefix.Satellites.bed
 
 # How many bp are each file?
 module load bedtools/2.31.0
 for type in "EDTA2.v0.2" "TRF_withMers" "Satellites"
 do
-  bp=`mergeBed -i annotation/$type.bed |awk '{sum+=$3-$2}END{print sum}'`
+  bp=`mergeBed -i annotation/$prefix.$type.bed |awk '{sum+=$3-$2}END{print sum}'`
   echo $type" "$bp
 done
 #EDTA2.v0.2 322876394
@@ -104,6 +105,17 @@ done
 
 module load python/3.11.2
 cat annotation/${prefix}.EDTA2.v0.2.bed annotation/${prefix}.TRF_withMers.bed functional/annotation/${prefix}.Satellites.bed |python3 python/repeat_summary.py >repeats/TE_TRF_SAT_lengths.txt
+
+
+# ~~~~~~~~~~~~~~~~~~~~~ EXTRACT REPEAT DENSITY PER WINDOW ~~~~~~~~~~~~~~~~~~~~~~
+wind="100kb" 
+prefix="bTaeGut7v0.4_MT_rDNA"
+echo '#!/bin/bash
+module load bedtools/2.31.0
+intersectBed -wao -a windows/'$prefix'.'${wind}'_windows.bed -b annotation/all_repeats.bed | cut -f1,2,3,7 |\
+  awk -v OFS="\t" '"'"'{if(NR==0){chr=$1; s=$2; e=$3; sum=$4}else{if($1==chr && $2==s){sum+=$4}else{print chr,s,e,sum; chr=$1; s=$2; e=$3; sum=$4}}}END{print chr,s,e,sum}'"'"' |\
+   sed "/^\s*$/d" >coverage/'${prefix}'.repeats.'$wind'.bed
+'| sbatch -J $n --ntasks=1 --cpus-per-task=1 --mem-per-cpu=6G --out slurm/coverage.$n.%j.out -t 10:00:00
 
 
 # #################### CALCULATE ENRICHMENT IN THE REPEATS #####################
